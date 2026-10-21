@@ -349,6 +349,8 @@
     <string name="manual_rate_hint">أدخل قيمة 1 %1$s بعملة %2$s</string>
     <string name="manual_rate_title">سعر يدوي لـ %1$s</string>
     <string name="market_prices">أسعار السوق</string>
+    <string name="metal_auto_sync">تحديث رصيد الشهر الحالي تلقائيًا</string>
+    <string name="metal_auto_sync_hint">كلما تغير السعر تتحدث قيمة الذهب والفضة في الشهر الحالي، وتبقى الأشهر السابقة كما سُجلت.</string>
     <string name="metal_calc_auto">حساب القيمة تلقائيًا من الوزن والعيار</string>
     <string name="metal_calc_auto_hint">اكتب الوزن والعيار، ويحسب التطبيق القيمة بسعر السوق الحالي.</string>
     <string name="metal_current_value">القيمة الحالية</string>
@@ -363,6 +365,7 @@
     <string name="metal_no_price">لا يوجد سعر</string>
     <string name="metal_no_price_long">لم يتم تحميل أسعار الذهب والفضة بعد. اضغط «تحديث الأسعار» أو أدخل السعر يدويًا.</string>
     <string name="metal_price_note">السعر التلقائي هو السعر العالمي محوّلًا للجنيه وقد يختلف قليلًا عن سعر محلات الصاغة؛ يمكنك إدخال سعر السوق المحلي يدويًا.</string>
+    <string name="metal_price_note_egypt">الأسعار من السوق المصري (أفضل سعر بيع لدى الصاغة والمنصات المرخصة) عبر Daleelak وتتحدث تلقائيًا؛ لا تشمل المصنعية.</string>
     <string name="metal_silver">فضة</string>
     <string name="metal_value_hint">تتغير القيمة تلقائيًا كلما تغير سعر السوق. لتسجيلها في شهر استخدم «تسجيل في الشهر» من شاشة الذهب والفضة.</string>
     <string name="metals_incomplete">عناصر ذهب بدون وزن</string>
@@ -550,7 +553,8 @@
     <string name="previous_month">الشهر السابق</string>
     <string name="previous_month_value">قيمة الشهر السابق</string>
     <string name="previous_value">السابق: %1$s</string>
-    <string name="price_src_auto">تلقائي</string>
+    <string name="price_src_egypt">سعر السوق المصري</string>
+    <string name="price_src_global">السعر العالمي</string>
     <string name="price_src_manual">يدوي</string>
     <string name="prices_updated_at">آخر تحديث: %1$s (%2$s)</string>
     <string name="privacy">الخصوصية</string>

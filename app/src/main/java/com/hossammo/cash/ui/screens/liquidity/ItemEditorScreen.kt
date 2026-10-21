@@ -199,6 +199,8 @@ class ItemEditorViewModel @Inject constructor(
         }
         val result = repo.saveItem(draft, amount?.let { BalanceDraft(month, itemId ?: "", it, f.lockRate, customRate, null) })
         result.onSuccess {
+            // قطعة ذهب/فضة: تحديث قيمتها في الشهر الحالي فورًا بسعر السوق
+            if (isMetal && metals.autoSync()) runCatching { metals.syncCurrentMonth() }
             message(R.string.msg_saved)
             _state.value = _state.value.copy(saved = true, original = f, confirmDuplicate = false)
         }.onFailure { e ->

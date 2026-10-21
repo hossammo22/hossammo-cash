@@ -49,4 +49,47 @@ class MetalsTest {
         val expected = env.metals.valueOf(env.db.itemDao().bySystemKey("silver_bar_250")!!, before)!!
         assertEquals(0, expected.compareTo(a.total(oct)))
     }
+
+    @Test
+    fun parsesEgyptianMarketFeedFromDaleelak() {
+        val body = """{"schemaVersion":1,"assets":[
+          {"slug":"gold-24k","unit":"EGP/g","directions":{"sell":{"best":{"value":7188}},"buy":{"best":{"value":7211}}},"global":{"value":7248.66}},
+          {"slug":"gold-21k","unit":"EGP/g","directions":{"sell":{"best":{"seller":"X","value":6300}},"buy":{"best":{"value":6309}}},"global":{"value":6342.58}},
+          {"slug":"silver-999","unit":"EGP/g","directions":{"sell":{"best":{"value":99.9}},"buy":{"best":{"value":102}}},"global":{"value":101.08}}
+        ]}"""
+        val f = com.hossammo.cash.data.metal.MetalPriceService.parseDaleelak(body)
+        assertEquals("daleelak", f.source)
+        // 6300 لجرام 21 => 7200 لجرام 24
+        assertEquals(0, BigDecimal("7200").compareTo(f.goldPureGram.setScale(2, java.math.RoundingMode.HALF_UP)))
+        // 99.9 لجرام 999 => 100 للخالص
+        assertEquals(0, BigDecimal("100").compareTo(f.silverPureGram.setScale(2, java.math.RoundingMode.HALF_UP)))
+    }
+
+    @Test
+    fun parserFallsBackToBuyThenGlobalAndRejectsMissingSilver() {
+        val onlyGlobal = """{"assets":[{"slug":"gold-21k","directions":{},"global":{"value":6300}},{"slug":"silver-999","directions":{"buy":{"best":{"value":99.9}}}}]}"""
+        val f = com.hossammo.cash.data.metal.MetalPriceService.parseDaleelak(onlyGlobal)
+        assertEquals(0, BigDecimal("7200").compareTo(f.goldPureGram.setScale(2, java.math.RoundingMode.HALF_UP)))
+        val noSilver = """{"assets":[{"slug":"gold-21k","directions":{"sell":{"best":{"value":6300}}}}]}"""
+        val r = runCatching { com.hossammo.cash.data.metal.MetalPriceService.parseDaleelak(noSilver) }
+        assertEquals(true, r.isFailure)
+    }
+
+    @Test
+    fun priceChangeUpdatesCurrentMonthAutomatically() = runBlocking {
+        env.liquidity.createMonth(oct, copyPrevious = false)
+        val today = java.time.LocalDate.of(2026, 10, 21)
+        env.metals.refresh()
+        assertEquals(1, env.metals.syncCurrentMonth(today))
+        val silverId = env.db.itemDao().bySystemKey("silver_bar_250")!!.id
+        suspend fun silverValue() = LiquidityAnalyzer(env.liquidity.observeData().first()).itemRows(oct).first { it.item.id == silverId }.valueBase
+        assertEquals(0, BigDecimal("14985").compareTo(silverValue()))
+        // ارتفع سعر الفضة: 60 -> 70
+        env.metalFetcher.silverPure = BigDecimal("70")
+        env.metals.refresh()
+        env.metals.syncCurrentMonth(today)
+        assertEquals(0, BigDecimal("17482.5").compareTo(silverValue()))
+        // شهر غير موجود: لا يُنشأ تلقائيًا
+        assertEquals(0, env.metals.syncCurrentMonth(java.time.LocalDate.of(2027, 1, 1)))
+    }
 }

@@ -30,12 +30,12 @@ class FakeRateFetcher : RateFetcher {
 }
 
 class FakeMetalFetcher : com.hossammo.cash.data.metal.MetalPriceFetcher {
-    var goldOunce: BigDecimal = BigDecimal("150000")
-    var silverOunce: BigDecimal = BigDecimal("1800")
+    var goldPure: BigDecimal = BigDecimal("4800")
+    var silverPure: BigDecimal = BigDecimal("60")
     var offline = false
     override suspend fun fetch(base: String, usdRateToBase: BigDecimal?): com.hossammo.cash.data.metal.FetchedMetalPrices {
         if (offline) throw com.hossammo.cash.data.currency.CurrencyFetchException.Network("offline")
-        return com.hossammo.cash.data.metal.FetchedMetalPrices(goldOunce, silverOunce, "fake")
+        return com.hossammo.cash.data.metal.FetchedMetalPrices(goldPure, silverPure, "fake")
     }
 }
 

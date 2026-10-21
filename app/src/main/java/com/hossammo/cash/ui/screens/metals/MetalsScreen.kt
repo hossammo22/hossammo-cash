@@ -96,6 +96,7 @@ data class MetalsUiState(
     val goldPureGrams: BigDecimal = BigDecimal.ZERO,
     val silverPureGrams: BigDecimal = BigDecimal.ZERO,
     val refreshing: Boolean = false,
+    val autoSync: Boolean = true,
 ) {
     val total: BigDecimal get() = goldTotal + silverTotal
 }
@@ -107,7 +108,7 @@ class MetalsViewModel @Inject constructor(
 ) : MessagesViewModel() {
     private val refreshing = MutableStateFlow(false)
 
-    val state: StateFlow<MetalsUiState> = combine(liquidity.observeData(), metals.prices, refreshing) { data, prices, busy ->
+    val state: StateFlow<MetalsUiState> = combine(liquidity.observeData(), metals.prices, refreshing, metals.autoSyncFlow) { data, prices, busy, sync ->
         val active = data.items.filter { !it.isArchived && it.assetType == AssetType.GOLD }
         val rows = active.mapNotNull { i -> i.metalSpec()?.let { MetalRow(i, it, metals.valueOf(i, prices)) } }
         fun sum(t: MetalType) = rows.filter { it.spec.type == t }.mapNotNull { it.value }.fold(BigDecimal.ZERO, BigDecimal::add)
@@ -116,17 +117,20 @@ class MetalsViewModel @Inject constructor(
         MetalsUiState(
             loading = false, prices = prices, rows = rows, incomplete = active.filter { it.metalSpec() == null },
             goldTotal = sum(MetalType.GOLD), silverTotal = sum(MetalType.SILVER),
-            goldPureGrams = grams(MetalType.GOLD), silverPureGrams = grams(MetalType.SILVER), refreshing = busy,
+            goldPureGrams = grams(MetalType.GOLD), silverPureGrams = grams(MetalType.SILVER), refreshing = busy, autoSync = sync,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MetalsUiState())
 
     init {
-        // تحديث تلقائي عند فتح الشاشة إذا كانت الأسعار أقدم من ساعة (ولا يُستبدل السعر اليدوي تلقائيًا)
+        // تحديث تلقائي عند فتح الشاشة إذا مر أكثر من 15 دقيقة (ولا يُستبدل السعر اليدوي تلقائيًا)
         viewModelScope.launch {
-            val p = metals.current()
-            if (p.source != MetalPriceService.SOURCE_MANUAL && System.currentTimeMillis() - p.updatedAt > 60 * 60 * 1000L) refresh(silent = true)
+            refreshing.value = true
+            runCatching { metals.refreshIfDue(15 * 60 * 1000L) }
+            refreshing.value = false
         }
     }
+
+    fun setAutoSync(v: Boolean) = viewModelScope.launch { metals.setAutoSync(v) }
 
     fun refresh(silent: Boolean = false) = viewModelScope.launch {
         if (refreshing.value) return@launch
@@ -209,11 +213,21 @@ fun MetalsScreen(onBack: () -> Unit, onAdd: () -> Unit, onEdit: (String) -> Unit
                         LabeledValue(stringResource(R.string.gram_price_at, purityLabel(MetalType.SILVER, 999)), f.money(p.gramAt(MetalType.SILVER, 999), base))
                         HorizontalDivider(Modifier.padding(vertical = 6.dp))
                         Text(
-                            stringResource(R.string.prices_updated_at, f.dateTime(p.updatedAt), stringResource(if (p.source == MetalPriceService.SOURCE_MANUAL) R.string.price_src_manual else R.string.price_src_auto)),
+                            stringResource(R.string.prices_updated_at, f.dateTime(p.updatedAt), stringResource(when (p.source) {
+                                MetalPriceService.SOURCE_MANUAL -> R.string.price_src_manual
+                                MetalPriceService.SOURCE_DALEELAK -> R.string.price_src_egypt
+                                else -> R.string.price_src_global
+                            })),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Text(stringResource(R.string.metal_price_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                    Text(
+                        stringResource(if (p?.source == MetalPriceService.SOURCE_DALEELAK) R.string.metal_price_note_egypt else R.string.metal_price_note),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline,
+                    )
+                    com.hossammo.cash.ui.components.SwitchRow(
+                        stringResource(R.string.metal_auto_sync), state.autoSync, vm::setAutoSync, subtitle = stringResource(R.string.metal_auto_sync_hint),
+                    )
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { vm.refresh() }, enabled = !state.refreshing, modifier = Modifier.weight(1f)) { Icon(Icons.Filled.Refresh, null); Spacer(Modifier.width(4.dp)); Text(stringResource(R.string.refresh_prices)) }

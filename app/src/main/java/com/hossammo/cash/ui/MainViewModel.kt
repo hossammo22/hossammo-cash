@@ -22,6 +22,7 @@ class MainViewModel @Inject constructor(
     private val prefsRepo: UserPreferencesRepository,
     private val seed: SeedRepository,
     private val currency: CurrencyRepository,
+    private val metals: com.hossammo.cash.data.metal.MetalRepository,
     val lockManager: LockManager,
 ) : ViewModel() {
 
@@ -42,6 +43,8 @@ class MainViewModel @Inject constructor(
                 _ready.value = true
                 // تحديث تلقائي للأسعار عند الحاجة (يعمل بصمت؛ عند عدم وجود إنترنت تبقى الأسعار المحفوظة)
                 if (currency.isAutoRefreshDue()) currency.refresh()
+                // أسعار الذهب والفضة في مصر: تحديث صامت إذا مر أكثر من ساعة
+                runCatching { metals.refreshIfDue() }
             } catch (e: Exception) {
                 _startupError.value = true
             }

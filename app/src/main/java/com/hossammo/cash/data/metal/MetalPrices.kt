@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
@@ -32,8 +33,8 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** سعر الأوقية بالعملة الأساسية لكل معدن. */
-data class FetchedMetalPrices(val goldOunce: BigDecimal, val silverOunce: BigDecimal, val source: String)
+/** سعر جرام المعدن الخالص (ذهب 24 / فضة 1000) بالعملة الأساسية. */
+data class FetchedMetalPrices(val goldPureGram: BigDecimal, val silverPureGram: BigDecimal, val source: String)
 
 /** واجهة جلب أسعار المعادن (قابلة للاستبدال في الاختبارات). الطلب لا يحمل أي بيانات مالية. */
 interface MetalPriceFetcher {
@@ -66,16 +67,17 @@ fun LiquidityItemEntity.metalSpec(): MetalSpec? {
 }
 
 /**
- * مصدر الأسعار:
- * 1) fawazahmed0 currency-api (يعطي xau/xag مقابل العملة الأساسية مباشرة) مع رابط احتياطي.
- * 2) gold-api.com (سعر لحظي بالدولار) × سعر الدولار المحفوظ في التطبيق.
- * HTTPS فقط، بدون أي مفاتيح أو بيانات مستخدم.
+ * مصادر الأسعار بالترتيب:
+ * 1) Daleelak (getdaleelak.com) — أسعار السوق المصري الفعلية (أفضل سعر بيع لدى الصاغة/المنصات المرخصة)
+ *    لعيار 21 والفضة 999 بالجنيه، مجاني بدون مفتاح. يُستخدم فقط عندما تكون العملة الأساسية EGP.
+ * 2) fawazahmed0 currency-api (السعر العالمي xau/xag محولًا للعملة الأساسية) مع رابط احتياطي.
+ * 3) gold-api.com (سعر لحظي عالمي بالدولار) × سعر الدولار المحفوظ في التطبيق.
+ * HTTPS فقط، والطلبات لا تحمل أي بيانات للمستخدم.
  */
 @Singleton
 class MetalPriceService @Inject constructor() : MetalPriceFetcher {
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).callTimeout(25, TimeUnit.SECONDS).build()
-    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
     private val mc = MathContext(20, RoundingMode.HALF_UP)
 
     private fun get(url: String): String {
@@ -89,6 +91,11 @@ class MetalPriceService @Inject constructor() : MetalPriceFetcher {
 
     override suspend fun fetch(base: String, usdRateToBase: BigDecimal?): FetchedMetalPrices = withContext(Dispatchers.IO) {
         var last: Exception? = null
+        if (base.equals("EGP", true)) {
+            try {
+                return@withContext parseDaleelak(get(DALEELAK_URL))
+            } catch (e: IOException) { last = e } catch (e: RuntimeException) { last = CurrencyFetchException.Parse(e.javaClass.simpleName) }
+        }
         val b = base.lowercase()
         for (url in listOf(
             "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/$b.json",
@@ -99,7 +106,10 @@ class MetalPriceService @Inject constructor() : MetalPriceFetcher {
                 val xau = rates["xau"]?.jsonPrimitive?.contentOrNull?.toBigDecimalOrNull()
                 val xag = rates["xag"]?.jsonPrimitive?.contentOrNull?.toBigDecimalOrNull()
                 if (xau == null || xag == null || xau.signum() <= 0 || xag.signum() <= 0) throw CurrencyFetchException.Parse("no metals")
-                return@withContext FetchedMetalPrices(BigDecimal.ONE.divide(xau, mc), BigDecimal.ONE.divide(xag, mc), SOURCE_FAWAZ)
+                return@withContext FetchedMetalPrices(
+                    MetalCalculator.gramPriceFromOunce(BigDecimal.ONE.divide(xau, mc)),
+                    MetalCalculator.gramPriceFromOunce(BigDecimal.ONE.divide(xag, mc)), SOURCE_FAWAZ,
+                )
             } catch (e: IOException) { last = e } catch (e: RuntimeException) { last = CurrencyFetchException.Parse(e.javaClass.simpleName) }
         }
         val usd = if (base.equals("USD", true)) BigDecimal.ONE else usdRateToBase
@@ -107,13 +117,46 @@ class MetalPriceService @Inject constructor() : MetalPriceFetcher {
             try {
                 fun price(sym: String) = json.parseToJsonElement(get("https://api.gold-api.com/price/$sym")).jsonObject["price"]
                     ?.jsonPrimitive?.contentOrNull?.toBigDecimalOrNull() ?: throw CurrencyFetchException.Parse("no price")
-                return@withContext FetchedMetalPrices(price("XAU").multiply(usd, mc), price("XAG").multiply(usd, mc), SOURCE_GOLD_API)
+                return@withContext FetchedMetalPrices(
+                    MetalCalculator.gramPriceFromOunce(price("XAU").multiply(usd, mc)),
+                    MetalCalculator.gramPriceFromOunce(price("XAG").multiply(usd, mc)), SOURCE_GOLD_API,
+                )
             } catch (e: IOException) { last = e } catch (e: RuntimeException) { last = CurrencyFetchException.Parse(e.javaClass.simpleName) }
         }
         throw last ?: CurrencyFetchException.Network("unknown")
     }
 
     companion object {
+        const val DALEELAK_URL = "https://getdaleelak.com/api/v1/feed.json?category=metals"
+        const val SOURCE_DALEELAK = "daleelak"
+        private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+        private val MC = MathContext(20, RoundingMode.HALF_UP)
+
+        /**
+         * يقرأ سعر جرام عيار 21 وجرام الفضة 999 من Daleelak ويحوّلهما لسعر الخالص.
+         * يُستخدم «أفضل سعر بيع» (ما يدفعه التاجر لك عند البيع) لأنه القيمة الفعلية لمدخراتك، ثم سعر الشراء، ثم السعر العالمي.
+         */
+        fun parseDaleelak(body: String): FetchedMetalPrices {
+            val assets = json.parseToJsonElement(body).jsonObject["assets"]?.jsonArray ?: throw CurrencyFetchException.Parse("no assets")
+            fun valueOf(slug: String): BigDecimal? {
+                val a = assets.map { it.jsonObject }.firstOrNull { it["slug"]?.jsonPrimitive?.contentOrNull == slug } ?: return null
+                fun best(dir: String) = runCatching {
+                    a["directions"]!!.jsonObject[dir]!!.jsonObject["best"]!!.jsonObject["value"]!!.jsonPrimitive.contentOrNull?.toBigDecimalOrNull()
+                }.getOrNull()
+                val global = runCatching { a["global"]!!.jsonObject["value"]!!.jsonPrimitive.contentOrNull?.toBigDecimalOrNull() }.getOrNull()
+                return (best("sell") ?: best("buy") ?: global)?.takeIf { it.signum() > 0 }
+            }
+            val g21 = valueOf("gold-21k")
+            val g24 = valueOf("gold-24k")
+            val s999 = valueOf("silver-999") ?: throw CurrencyFetchException.Parse("no silver")
+            val goldPure = when {
+                g21 != null -> MetalCalculator.purePriceFrom(MetalType.GOLD, 21, g21)
+                g24 != null -> g24
+                else -> throw CurrencyFetchException.Parse("no gold")
+            }
+            return FetchedMetalPrices(goldPure, MetalCalculator.purePriceFrom(MetalType.SILVER, 999, s999), SOURCE_DALEELAK)
+        }
+
         const val SOURCE_FAWAZ = "fawaz"
         const val SOURCE_GOLD_API = "gold-api"
         const val SOURCE_MANUAL = "manual"
@@ -163,9 +206,10 @@ class MetalRepository @Inject constructor(
         val usd = db.rateDao().byCode("USD")?.rateToBase
         return try {
             val f = fetcher.fetch(base, usd)
-            val gold = MetalCalculator.gramPriceFromOunce(f.goldOunce).setScale(4, RoundingMode.HALF_UP)
-            val silver = MetalCalculator.gramPriceFromOunce(f.silverOunce).setScale(4, RoundingMode.HALF_UP)
+            val gold = f.goldPureGram.setScale(4, RoundingMode.HALF_UP)
+            val silver = f.silverPureGram.setScale(4, RoundingMode.HALF_UP)
             savePrices(gold, silver, f.source)
+            if (autoSync()) syncCurrentMonth()
             MetalRefreshResult.Ok
         } catch (e: CurrencyFetchException.Network) {
             MetalRefreshResult.Offline
@@ -176,12 +220,34 @@ class MetalRepository @Inject constructor(
         }
     }
 
+    /** تحديث تلقائي إذا كانت الأسعار أقدم من [maxAgeMs] ولم يُدخلها المستخدم يدويًا. */
+    suspend fun refreshIfDue(maxAgeMs: Long = 60 * 60 * 1000L): MetalRefreshResult? {
+        val p = current()
+        if (p.source == MetalPriceService.SOURCE_MANUAL) return null
+        if (System.currentTimeMillis() - p.updatedAt < maxAgeMs) return null
+        return refresh()
+    }
+
+    /** تحديث رصيد الشهر الحالي للذهب والفضة تلقائيًا عند تغير السعر (افتراضيًا مفعّل). */
+    val autoSyncFlow: Flow<Boolean> = dao.observeAll().map { l -> l.firstOrNull { it.key == K_AUTO_SYNC }?.value?.toBooleanStrictOrNull() ?: true }
+    suspend fun autoSync(): Boolean = dao.get(K_AUTO_SYNC)?.toBooleanStrictOrNull() ?: true
+    suspend fun setAutoSync(v: Boolean) { put(K_AUTO_SYNC, v.toString()); if (v) syncCurrentMonth() }
+
+    /** يسجل القيم الحالية في الشهر الحالي فقط إذا كان الشهر موجودًا (لا يُنشئ أشهرًا تلقائيًا). */
+    suspend fun syncCurrentMonth(today: java.time.LocalDate = java.time.LocalDate.now()): Int {
+        val key = MonthKey.of(today.year, today.monthValue)
+        val m = db.monthDao().byKey(key.value) ?: return 0
+        if (m.deletedAt != null) return 0
+        return applyToMonth(key)
+    }
+
     /** إدخال يدوي: سعر جرام الذهب عيار 21 وسعر جرام الفضة 999 (كما يُسعَّر في السوق المصري). */
     suspend fun setManual(gold21PerGram: BigDecimal?, silver999PerGram: BigDecimal?) {
         val cur = current()
         val gold = gold21PerGram?.let { MetalCalculator.purePriceFrom(MetalType.GOLD, 21, it).setScale(4, RoundingMode.HALF_UP) } ?: cur.goldPurePerGram
         val silver = silver999PerGram?.let { MetalCalculator.purePriceFrom(MetalType.SILVER, 999, it).setScale(4, RoundingMode.HALF_UP) } ?: cur.silverPurePerGram
         savePrices(gold, silver, MetalPriceService.SOURCE_MANUAL)
+        if (autoSync()) syncCurrentMonth()
     }
 
     private suspend fun savePrices(gold: BigDecimal?, silver: BigDecimal?, source: String) {
@@ -222,5 +288,6 @@ class MetalRepository @Inject constructor(
         const val K_SILVER = "metal_silver_pure_gram"
         const val K_AT = "metal_prices_at"
         const val K_SRC = "metal_prices_src"
+        const val K_AUTO_SYNC = "metal_auto_sync_month"
     }
 }
