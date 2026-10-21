@@ -1,0 +1,11 @@
+name: Probe price sources
+on: workflow_dispatch
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -s https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/egp.json | python3 -c "import json,sys;d=json.load(sys.stdin);e=d['egp'];print('FAWAZ',d['date'],'xau',e.get('xau'),'xag',e.get('xag'),'usd',e.get('usd'))"
+          curl -s https://latest.currency-api.pages.dev/v1/currencies/egp.json | python3 -c "import json,sys;d=json.load(sys.stdin);e=d['egp'];print('PAGES',d['date'],'xau',e.get('xau'),'xag',e.get('xag'))"
+          curl -s https://open.er-api.com/v6/latest/EGP | python3 -c "import json,sys;d=json.load(sys.stdin);print('ER',d['rates'].get('XAU'),d['rates'].get('XAG'),d['rates'].get('USD'))"
+          curl -s https://api.gold-api.com/price/XAU; echo; curl -s https://api.gold-api.com/price/XAG; echo
