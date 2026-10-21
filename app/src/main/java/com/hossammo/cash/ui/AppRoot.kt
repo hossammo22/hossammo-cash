@@ -2,6 +2,7 @@ package com.hossammo.cash.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -33,19 +34,26 @@ fun AppRoot(viewModel: MainViewModel) {
     val startupError by viewModel.startupError.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val p = prefs
-    HossamMoCashTheme(themeMode = p?.themeMode ?: com.hossammo.cash.data.settings.ThemeMode.SYSTEM) {
+    HossamMoCashTheme(
+        themeMode = p?.themeMode ?: com.hossammo.cash.data.settings.ThemeMode.SYSTEM,
+        onToggleTheme = { dark -> viewModel.setDarkTheme(dark) },
+    ) {
         val formatter = remember(p?.numberStyle, p?.hideValues) {
             AppFormatter(context, p?.numberStyle ?: com.hossammo.cash.data.settings.NumberStyle.LATIN, p?.hideValues ?: false)
         }
         // التطبيق عربي بالكامل: اتجاه RTL ثابت بغض النظر عن لغة الجهاز
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl, LocalAppFormatter provides formatter) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                val inMain = p != null && ready && !startupError && !(p.pinEnabled && locked) && p.onboardingDone
+                // الشاشات بدون Scaffold (الترحيب/القفل) تحتاج هوامش أشرطة النظام حتى لا تقع الأزرار تحت شريط الحالة
+                androidx.compose.foundation.layout.Box(if (inMain) Modifier.fillMaxSize() else Modifier.fillMaxSize().then(Modifier.systemBarsPadding())) {
                 when {
                     startupError -> EmptyState(stringResource(R.string.error_title), stringResource(R.string.startup_error))
                     p == null || !ready -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                    p.pinEnabled && locked -> LockScreen(biometricEnabled = p.biometricEnabled, onUnlocked = { viewModel.lockManager.unlock() })
+                    p.pinEnabled && locked -> LockScreen(biometricEnabled = p.biometricEnabled, onUnlocked = { viewModel.lockManager.unlock() }, pinLength = p.pinLength)
                     !p.onboardingDone -> OnboardingScreen(onFinish = { viewModel.completeOnboarding() })
                     else -> MainScaffold(hideValues = p.hideValues, onToggleHide = { viewModel.toggleHideValues() })
+                }
                 }
             }
         }

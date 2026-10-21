@@ -61,6 +61,7 @@ import com.hossammo.cash.ui.charts.Legend
 import com.hossammo.cash.ui.components.ChipsRow
 import com.hossammo.cash.ui.components.EmptyState
 import com.hossammo.cash.ui.components.FinanceCard
+import com.hossammo.cash.ui.components.HeroCard
 import com.hossammo.cash.ui.components.ItemAvatar
 import com.hossammo.cash.ui.components.LabeledValue
 import com.hossammo.cash.ui.components.MonthSelector
@@ -134,20 +135,20 @@ private fun DashboardContent(
         }
         Spacer(Modifier.height(8.dp))
         // البطاقة الرئيسية: أين أموالي الآن؟
-        FinanceCard(Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.dash_total_liquidity), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        HeroCard(Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.dash_total_liquidity), style = MaterialTheme.typography.labelLarge, color = Color.White.copy(alpha = 0.8f))
             Text(
-                f.money(s.total, base), style = MaterialTheme.typography.headlineMedium.copy(textDirection = TextDirection.Content),
-                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
+                f.money(s.total, base), style = MaterialTheme.typography.headlineLarge.copy(textDirection = TextDirection.Content),
+                fontWeight = FontWeight.ExtraBold, color = fc.gold,
             )
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TrendBadge(s.changeVsPrevious.status, s.changeVsPrevious.change, s.changeVsPrevious.percent)
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.vs_previous_month), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.vs_previous_month), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.75f))
             }
             if (s.changeVsPrevious.percent == null) {
-                Text(stringResource(R.string.comparison_unavailable_long), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                Text(stringResource(R.string.comparison_unavailable_long), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
             }
             if (s.netTransfersMoved.signum() > 0) {
                 Spacer(Modifier.height(6.dp))
@@ -158,7 +159,7 @@ private fun DashboardContent(
                 }
             }
             Spacer(Modifier.height(4.dp))
-            TextButton(onClick = { onOpenMonthEntry(state.selected!!.value) }) { Text(stringResource(R.string.edit_month_balances)) }
+            TextButton(onClick = { onOpenMonthEntry(state.selected!!.value) }) { Text(stringResource(R.string.edit_month_balances), color = fc.gold) }
         }
 
         SectionHeader(stringResource(R.string.dash_key_figures))

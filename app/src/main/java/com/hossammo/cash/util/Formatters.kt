@@ -68,6 +68,13 @@ class AppFormatter(
 
     fun integer(v: Int): String = intFormat.format(v.toLong())
 
+    /** رقم عشري عام (مثل الأوزان بالجرام) حتى 4 منازل. */
+    fun decimal(v: BigDecimal?): String = when {
+        v == null -> context.getString(R.string.value_empty)
+        hideValues -> masked
+        else -> rateFormat.format(v)
+    }
+
     fun currencySymbol(code: String): String = when (code.uppercase()) {
         "EGP" -> context.getString(R.string.currency_egp_short)
         else -> code.uppercase()

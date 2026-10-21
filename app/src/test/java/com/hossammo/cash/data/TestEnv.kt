@@ -29,6 +29,16 @@ class FakeRateFetcher : RateFetcher {
     }
 }
 
+class FakeMetalFetcher : com.hossammo.cash.data.metal.MetalPriceFetcher {
+    var goldOunce: BigDecimal = BigDecimal("150000")
+    var silverOunce: BigDecimal = BigDecimal("1800")
+    var offline = false
+    override suspend fun fetch(base: String, usdRateToBase: BigDecimal?): com.hossammo.cash.data.metal.FetchedMetalPrices {
+        if (offline) throw com.hossammo.cash.data.currency.CurrencyFetchException.Network("offline")
+        return com.hossammo.cash.data.metal.FetchedMetalPrices(goldOunce, silverOunce, "fake")
+    }
+}
+
 /** بيئة اختبار كاملة بقاعدة بيانات في الذاكرة (بدون SQLCipher لأن مكتبته الأصلية لا تعمل على JVM). */
 class TestEnv {
     val context: Context = ApplicationProvider.getApplicationContext()
@@ -42,6 +52,8 @@ class TestEnv {
     val fetcher = FakeRateFetcher()
     val currency = CurrencyRepository(db, fetcher, prefs, settings, liquidity, audit)
     val backup = BackupManager(context, db, audit)
+    val metalFetcher = FakeMetalFetcher()
+    val metals = com.hossammo.cash.data.metal.MetalRepository(db, metalFetcher, settings, liquidity, audit)
 
     fun close() = db.close()
 }

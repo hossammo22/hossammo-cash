@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Unarchive
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -119,6 +120,7 @@ fun LiquidityScreen(
     onOpenCategories: () -> Unit,
     onOpenCompare: () -> Unit,
     onOpenMonthEntry: (Int) -> Unit,
+    onOpenMetals: () -> Unit = {},
     vm: LiquidityViewModel = hiltViewModel(),
 ) {
     val noLoc = stringResource(R.string.no_location)
@@ -139,6 +141,7 @@ fun LiquidityScreen(
         title = stringResource(R.string.nav_liquidity),
         snackbar = snackbar,
         actions = {
+            IconButton(onClick = onOpenMetals) { Icon(Icons.Filled.WorkspacePremium, stringResource(R.string.metals_title)) }
             IconButton(onClick = onOpenTransfers) { Icon(Icons.Filled.SwapHoriz, stringResource(R.string.transfers_title)) }
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, stringResource(R.string.more_options)) }
@@ -157,10 +160,32 @@ fun LiquidityScreen(
             Column(Modifier.padding(horizontal = 16.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { MonthSelector(state.months, state.selected, vm::selectMonth) }
                 if (state.selected != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(stringResource(R.string.month_total_label), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                        Text(f.money(state.total, state.base), style = MaterialTheme.typography.titleMedium.copy(textDirection = TextDirection.Content), fontWeight = FontWeight.Bold)
-                        TextButton(onClick = { onOpenMonthEntry(state.selected!!.value) }) { Text(stringResource(R.string.edit_balances)) }
+                    val fc = com.hossammo.cash.ui.theme.LocalFinanceColors.current
+                    com.hossammo.cash.ui.components.HeroCard(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(stringResource(R.string.month_total_label), style = MaterialTheme.typography.labelLarge, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f))
+                                Text(f.money(state.total, state.base), style = MaterialTheme.typography.headlineSmall.copy(textDirection = TextDirection.Content), fontWeight = FontWeight.ExtraBold, color = fc.gold)
+                            }
+                            TextButton(onClick = { onOpenMonthEntry(state.selected!!.value) }) { Text(stringResource(R.string.edit_balances), color = fc.gold) }
+                        }
+                    }
+                    // إجمالي كل فئة: البنوك، النقدية، الذهب والفضة...
+                    if (state.categoryTotals.isNotEmpty()) {
+                        Row(Modifier.horizontalScroll(rememberScrollState()).padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            state.categoryTotals.forEach { (c, total) ->
+                                FinanceCard(Modifier.width(170.dp), onClick = { vm.updateQuery { q -> q.copy(categoryId = if (q.categoryId == c.id) null else c.id) } }) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        ItemAvatar(c.icon, c.colorHex, size = 28)
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(stringResource(R.string.category_total, c.name), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(f.money(total, state.base), style = MaterialTheme.typography.titleSmall.copy(textDirection = TextDirection.Content), fontWeight = FontWeight.ExtraBold, maxLines = 1,
+                                        color = if (state.query.categoryId == c.id) MaterialTheme.colorScheme.secondary else androidx.compose.ui.graphics.Color.Unspecified)
+                                }
+                            }
+                        }
                     }
                 } else {
                     TextButton(onClick = onOpenMonths) { Text(stringResource(R.string.add_first_month)) }

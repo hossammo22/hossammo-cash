@@ -38,7 +38,12 @@ import com.hossammo.cash.data.model.OpResult
 import com.hossammo.cash.data.repo.BalanceDraft
 import com.hossammo.cash.data.repo.ItemDraft
 import com.hossammo.cash.data.repo.LiquidityRepository
+import com.hossammo.cash.domain.calc.MetalCalculator
+import com.hossammo.cash.domain.calc.MetalForm
+import com.hossammo.cash.domain.calc.MetalType
 import com.hossammo.cash.domain.model.AssetType
+import com.hossammo.cash.ui.components.ChipsRow
+import com.hossammo.cash.ui.components.LabeledValue
 import com.hossammo.cash.domain.model.LiquidityLevel
 import com.hossammo.cash.domain.model.Money
 import com.hossammo.cash.domain.model.MonthKey
@@ -82,6 +87,11 @@ data class ItemForm(
     val includeInTotal: Boolean = true,
     val isVariable: Boolean = false,
     val notes: String = "",
+    val metalType: MetalType? = null,
+    val metalForm: MetalForm = MetalForm.BAR,
+    val weight: String = "",
+    val purity: Int = 21,
+    val count: String = "1",
 )
 
 data class ItemEditorState(
@@ -97,6 +107,7 @@ data class ItemEditorState(
     val nameError: Boolean = false,
     val saved: Boolean = false,
     val confirmDuplicate: Boolean = false,
+    val metalPrices: com.hossammo.cash.data.metal.MetalPrices? = null,
 ) {
     val dirty: Boolean get() = form != original
 }
@@ -108,8 +119,10 @@ class ItemEditorViewModel @Inject constructor(
     savedState: SavedStateHandle,
     private val repo: LiquidityRepository,
     private val session: SessionState,
+    private val metals: com.hossammo.cash.data.metal.MetalRepository,
 ) : MessagesViewModel() {
     private val itemId: String? = savedState["id"]
+    private val preset: String? = savedState["preset"]
     private val _state = MutableStateFlow(ItemEditorState())
     val state: StateFlow<ItemEditorState> = _state.asStateFlow()
 
@@ -122,6 +135,14 @@ class ItemEditorViewModel @Inject constructor(
                 name = item.name, categoryId = item.categoryId, location = item.locationId?.let { data.locationById[it]?.name } ?: "",
                 assetType = item.assetType, currency = item.currencyCode, color = item.colorHex, icon = item.icon, level = item.liquidityLevel,
                 includeInTotal = item.includeInTotal, isVariable = item.isVariable, notes = item.notes ?: "",
+                metalType = item.metalType?.let { runCatching { MetalType.valueOf(it) }.getOrNull() },
+                metalForm = item.metalForm?.let { runCatching { MetalForm.valueOf(it) }.getOrNull() } ?: MetalForm.BAR,
+                weight = item.weightGrams?.stripTrailingZeros()?.toPlainString() ?: "",
+                purity = item.purity ?: 21, count = (item.pieceCount ?: 1).toString(),
+            ) else if (preset == "metal") ItemForm(
+                categoryId = (data.categories.firstOrNull { it.systemKey == "gold" } ?: data.categories.firstOrNull())?.id,
+                assetType = AssetType.GOLD, currency = data.baseCurrency, color = "#C69B35", icon = "gold",
+                level = LiquidityLevel.NEEDS_LIQUIDATION, isVariable = true, metalType = MetalType.GOLD,
             ) else ItemForm(categoryId = data.categories.firstOrNull()?.id)
             _state.value = ItemEditorState(
                 loading = false, isEdit = item != null, form = form, original = form, categories = data.categories,
@@ -129,6 +150,16 @@ class ItemEditorViewModel @Inject constructor(
             )
             updateRate(form.currency)
         }
+        viewModelScope.launch { metals.prices.collect { p -> _state.value = _state.value.copy(metalPrices = p) } }
+    }
+
+    /** القيمة الحالية المحسوبة من الوزن والعيار وسعر السوق. */
+    fun metalValue(f: ItemForm, prices: com.hossammo.cash.data.metal.MetalPrices?): java.math.BigDecimal? {
+        val t = f.metalType ?: return null
+        val w = Money.parseOrNull(f.weight)?.takeIf { it.signum() > 0 } ?: return null
+        val c = f.count.toIntOrNull()?.takeIf { it > 0 } ?: return null
+        val p = prices?.purePrice(t) ?: return null
+        return MetalCalculator.value(t, w, f.purity, c, p)
     }
 
     private fun updateRate(code: String) = viewModelScope.launch {
@@ -152,7 +183,15 @@ class ItemEditorViewModel @Inject constructor(
         if (f.balance.isNotBlank() && (amount == null || amount.signum() < 0)) { message(R.string.msg_invalid_amount, true); return@launch }
         val customRate = Money.parseOrNull(f.customRate)
         if (f.lockRate && f.customRate.isNotBlank() && (customRate == null || customRate.signum() <= 0)) { message(R.string.msg_invalid_rate, true); return@launch }
-        val draft = ItemDraft(itemId, f.name, catId, f.location, f.assetType, f.currency, f.color, f.icon, f.level, f.includeInTotal, f.isVariable, f.notes)
+        val isMetal = f.assetType == AssetType.GOLD && f.metalType != null
+        val weight = Money.parseOrNull(f.weight)
+        val count = f.count.toIntOrNull()
+        if (isMetal && (weight == null || weight.signum() <= 0 || count == null || count <= 0)) { message(R.string.msg_metal_weight_required, true); return@launch }
+        val draft = ItemDraft(
+            itemId, f.name, catId, f.location, f.assetType, f.currency, f.color, f.icon, f.level, f.includeInTotal, f.isVariable, f.notes,
+            metalType = if (isMetal) f.metalType!!.name else null, metalForm = if (isMetal) f.metalForm.name else null,
+            weightGrams = if (isMetal) weight else null, purity = if (isMetal) f.purity else null, pieceCount = if (isMetal) count else null,
+        )
         val month = s.month ?: MonthKey.of(java.time.LocalDate.now().year, java.time.LocalDate.now().monthValue)
         // التحقق من التكرار قبل الحفظ إذا أدخل المستخدم رصيدًا لشهر به رصيد مسبق
         if (amount != null && itemId != null && !confirmOverwrite && repo.hasBalance(month, itemId)) {
@@ -204,6 +243,8 @@ fun ItemEditorScreen(onBack: () -> Unit, onSaved: () -> Unit, vm: ItemEditorView
             }
             DropdownField(stringResource(R.string.liquidity_level), LiquidityLevel.entries.toList(), form.level, { stringResource(Labels.level(it)) }, { l -> vm.update { it.copy(level = l) } })
 
+            if (form.assetType == AssetType.GOLD) MetalSection(form, state.metalPrices, vm)
+
             SectionHeader(stringResource(R.string.balance_for_month, state.month?.let { f.month(it) } ?: stringResource(R.string.current_month)))
             AmountField(form.balance, { v -> vm.update { it.copy(balance = v) } }, stringResource(R.string.balance_optional), suffix = form.currency)
             if (isForeign) {
@@ -238,5 +279,61 @@ fun ItemEditorScreen(onBack: () -> Unit, onSaved: () -> Unit, vm: ItemEditorView
     }
     if (state.confirmDuplicate) {
         ConfirmDialog(stringResource(R.string.duplicate_balance_title), stringResource(R.string.duplicate_balance_message), confirmText = stringResource(R.string.overwrite), onConfirm = { vm.save(confirmOverwrite = true) }, onDismiss = { vm.dismissDuplicate() })
+    }
+}
+
+
+@Composable
+fun metalTypeLabel(t: MetalType) = stringResource(if (t == MetalType.GOLD) R.string.metal_gold else R.string.metal_silver)
+
+@Composable
+fun metalFormLabel(f: MetalForm) = stringResource(
+    when (f) {
+        MetalForm.BAR -> R.string.metal_form_bar
+        MetalForm.GOLD_POUND -> R.string.metal_form_gold_pound
+        MetalForm.COIN -> R.string.metal_form_coin
+        MetalForm.JEWELRY -> R.string.metal_form_jewelry
+        MetalForm.OTHER -> R.string.metal_form_other
+    }
+)
+
+@Composable
+fun purityLabel(t: MetalType, p: Int): String {
+    val f = fmt()
+    val n = with(f) { p.toString().localizeDigits() }
+    return if (t == MetalType.GOLD) stringResource(R.string.karat_value, n) else stringResource(R.string.fineness_value, n)
+}
+
+/** قسم المعادن الثمينة في محرر العنصر: النوع والشكل والوزن والعيار والعدد مع القيمة الحالية. */
+@Composable
+private fun MetalSection(form: ItemForm, prices: com.hossammo.cash.data.metal.MetalPrices?, vm: ItemEditorViewModel) {
+    val f = fmt()
+    SectionHeader(stringResource(R.string.metal_details))
+    SwitchRow(stringResource(R.string.metal_calc_auto), form.metalType != null, { on ->
+        vm.update { it.copy(metalType = if (on) MetalType.GOLD else null, purity = 21, metalForm = MetalForm.BAR) }
+    }, subtitle = stringResource(R.string.metal_calc_auto_hint))
+    val type = form.metalType ?: return
+    ChipsRow(MetalType.entries.toList(), type, { metalTypeLabel(it) }, { t ->
+        vm.update { it.copy(metalType = t, purity = MetalCalculator.defaultPurity(t), metalForm = if (t == MetalType.SILVER && it.metalForm == MetalForm.GOLD_POUND) MetalForm.BAR else it.metalForm) }
+    })
+    val forms = if (type == MetalType.GOLD) MetalForm.entries.toList() else MetalForm.entries.filter { it != MetalForm.GOLD_POUND }
+    DropdownField(stringResource(R.string.metal_form), forms, form.metalForm, { metalFormLabel(it) }, { fm ->
+        vm.update {
+            if (fm == MetalForm.GOLD_POUND) it.copy(metalForm = fm, weight = MetalCalculator.GOLD_POUND_GRAMS.toPlainString(), purity = MetalCalculator.GOLD_POUND_KARAT)
+            else it.copy(metalForm = fm)
+        }
+    })
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AmountField(form.weight, { v -> vm.update { it.copy(weight = v) } }, stringResource(R.string.weight_grams), Modifier.weight(1f), suffix = stringResource(R.string.gram_short))
+        AmountField(form.count, { v -> vm.update { it.copy(count = v.filter { ch -> ch.isDigit() }.take(4)) } }, stringResource(R.string.piece_count), Modifier.weight(0.6f))
+    }
+    val purities = if (type == MetalType.GOLD) MetalCalculator.GOLD_KARATS else MetalCalculator.SILVER_FINENESS
+    DropdownField(stringResource(if (type == MetalType.GOLD) R.string.karat else R.string.fineness), (purities + form.purity).distinct(), form.purity, { purityLabel(type, it) }, { p -> vm.update { it.copy(purity = p) } })
+    FinanceCard(Modifier.fillMaxWidth()) {
+        val gram = prices?.gramAt(type, form.purity)
+        LabeledValue(stringResource(R.string.gram_price_at, purityLabel(type, form.purity)), if (gram == null || prices == null) stringResource(R.string.metal_no_price) else f.money(gram, prices.base))
+        val v = vm.metalValue(form, prices)
+        LabeledValue(stringResource(R.string.metal_current_value), if (v == null || prices == null) stringResource(R.string.not_available) else f.money(v, prices.base), valueColor = com.hossammo.cash.ui.theme.LocalFinanceColors.current.gold)
+        Text(stringResource(R.string.metal_value_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

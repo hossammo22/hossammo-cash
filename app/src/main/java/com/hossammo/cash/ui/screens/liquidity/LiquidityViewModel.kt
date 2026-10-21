@@ -45,6 +45,8 @@ data class LiquidityUiState(
     val categories: List<SavingsCategoryEntity> = emptyList(),
     val query: LiquidityQuery = LiquidityQuery(),
     val totalItems: Int = 0,
+    /** إجمالي كل فئة (مثل إجمالي البنوك) للشهر المختار. */
+    val categoryTotals: List<Pair<SavingsCategoryEntity, BigDecimal>> = emptyList(),
 )
 
 @HiltViewModel
@@ -95,7 +97,12 @@ class LiquidityViewModel @Inject constructor(
             ViewMode.BY_CURRENCY -> rows.groupBy { it.item.currencyCode }.toList()
             else -> emptyList()
         }
+        val catTotals = if (selected == null) emptyList() else data.categories.mapNotNull { c ->
+            val inCat = allRows.filter { it.item.categoryId == c.id && !it.item.isArchived && it.balance != null }
+            if (inCat.isEmpty()) null else c to groupTotal(inCat)
+        }.sortedByDescending { it.second }
         LiquidityUiState(
+            categoryTotals = catTotals,
             loading = false, base = data.baseCurrency, months = a.monthKeys, selected = selected,
             total = selected?.let { a.total(it) } ?: BigDecimal.ZERO, rows = rows, groups = groups,
             categories = data.categories, query = q, totalItems = data.items.size,

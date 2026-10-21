@@ -54,6 +54,8 @@ data class UserPrefs(
     val hideValues: Boolean = false,
     val biometricEnabled: Boolean = false,
     val pinEnabled: Boolean = false,
+    /** طول الرمز (لا يكشف الرمز نفسه) لتمكين الدخول التلقائي عند اكتمال الإدخال. */
+    val pinLength: Int? = null,
     /** بالدقائق؛ 0 = فوري عند الخروج، -1 = بدون قفل تلقائي. */
     val autoLockMinutes: Int = 1,
     val secureScreen: Boolean = true,
@@ -79,6 +81,7 @@ class UserPreferencesRepository @Inject constructor(@ApplicationContext private 
         val bio = booleanPreferencesKey("biometric_enabled")
         val pinHash = stringPreferencesKey("pin_hash")
         val pinSalt = stringPreferencesKey("pin_salt")
+        val pinLength = intPreferencesKey("pin_length")
         val autoLock = intPreferencesKey("auto_lock_minutes")
         val secure = booleanPreferencesKey("secure_screen")
         val provider = stringPreferencesKey("rate_provider")
@@ -109,6 +112,7 @@ class UserPreferencesRepository @Inject constructor(@ApplicationContext private 
             hideValues = p[K.hide] ?: false,
             biometricEnabled = p[K.bio] ?: false,
             pinEnabled = p[K.pinHash] != null,
+            pinLength = p[K.pinLength],
             autoLockMinutes = p[K.autoLock] ?: 1,
             secureScreen = p[K.secure] ?: true,
             rateProvider = RateProviderId.from(p[K.provider]),
@@ -172,12 +176,13 @@ class UserPreferencesRepository @Inject constructor(@ApplicationContext private 
         context.dataStore.edit {
             it[K.pinSalt] = Base64.encodeToString(salt, Base64.NO_WRAP)
             it[K.pinHash] = Base64.encodeToString(hash, Base64.NO_WRAP)
+            it[K.pinLength] = pin.length
             it[K.pinFailures] = 0
         }
     }
 
     suspend fun clearPin() = context.dataStore.edit {
-        it.remove(K.pinHash); it.remove(K.pinSalt); it[K.bio] = false
+        it.remove(K.pinHash); it.remove(K.pinSalt); it.remove(K.pinLength); it[K.bio] = false
     }
 
     sealed interface PinResult {
@@ -194,7 +199,7 @@ class UserPreferencesRepository @Inject constructor(@ApplicationContext private 
         val salt = data[K.pinSalt]?.let { Base64.decode(it, Base64.NO_WRAP) } ?: return PinResult.Ok
         val hash = data[K.pinHash]?.let { Base64.decode(it, Base64.NO_WRAP) } ?: return PinResult.Ok
         return if (PinHasher.verify(pin, salt, hash)) {
-            context.dataStore.edit { it[K.pinFailures] = 0; it.remove(K.pinLockedUntil) }
+            context.dataStore.edit { it[K.pinFailures] = 0; it.remove(K.pinLockedUntil); it[K.pinLength] = pin.length }
             PinResult.Ok
         } else {
             val failures = (data[K.pinFailures] ?: 0) + 1

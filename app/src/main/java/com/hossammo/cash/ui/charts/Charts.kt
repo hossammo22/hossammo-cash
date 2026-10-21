@@ -129,17 +129,33 @@ fun LineChart(
                 drawLine(selColor, Offset(x(si), top), Offset(x(si), bottom), strokeWidth = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f)))
             }
             series.forEach { s ->
-                val path = Path()
-                var started = false
+                // منحنى ناعم (Bezier) مع تظليل متدرج أسفل الخط
+                val segments = mutableListOf<List<Pair<Float, Float>>>()
+                var cur = mutableListOf<Pair<Float, Float>>()
                 s.values.forEachIndexed { i, v ->
-                    if (v == null) { started = false; return@forEachIndexed }
-                    if (!started) { path.moveTo(x(i), y(v)); started = true } else path.lineTo(x(i), y(v))
+                    if (v == null) { if (cur.isNotEmpty()) segments += cur; cur = mutableListOf() } else cur += x(i) to y(v)
                 }
-                drawPath(path, s.color, style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round))
+                if (cur.isNotEmpty()) segments += cur
+                segments.forEach { pts ->
+                    val path = Path()
+                    pts.forEachIndexed { k, (px, py) ->
+                        if (k == 0) path.moveTo(px, py) else {
+                            val (qx, qy) = pts[k - 1]
+                            val mx = (qx + px) / 2
+                            path.cubicTo(mx, qy, mx, py, px, py)
+                        }
+                    }
+                    if (pts.size > 1 && series.size <= 2) {
+                        val area = Path().apply { addPath(path); lineTo(pts.last().first, bottom); lineTo(pts.first().first, bottom); close() }
+                        drawPath(area, androidx.compose.ui.graphics.Brush.verticalGradient(listOf(s.color.copy(alpha = 0.32f), s.color.copy(alpha = 0.02f)), startY = top, endY = bottom))
+                    }
+                    drawPath(path, s.color, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
+                }
                 s.values.forEachIndexed { i, v ->
                     if (v != null) {
-                        val r = if (i == selectedIndex) 5.dp.toPx() else 3.dp.toPx()
+                        val r = if (i == selectedIndex) 6.dp.toPx() else 4.dp.toPx()
                         drawCircle(s.color, r, Offset(x(i), y(v)))
+                        drawCircle(Color.White, r * 0.45f, Offset(x(i), y(v)))
                     }
                 }
             }
@@ -222,7 +238,9 @@ fun BarChart(
 }
 
 private fun DrawScope.drawRoundRectBar(color: Color, x: Float, y: Float, w: Float, h: Float) {
-    drawRoundRect(color, Offset(x, y), Size(w, h), androidx.compose.ui.geometry.CornerRadius(4.dp.toPx(), 4.dp.toPx()))
+    val brush = androidx.compose.ui.graphics.Brush.verticalGradient(listOf(color, color.copy(alpha = 0.55f)), startY = y, endY = y + h)
+    val r = min(8.dp.toPx(), w / 2)
+    drawRoundRect(brush, Offset(x, y), Size(w, h), androidx.compose.ui.geometry.CornerRadius(r, r))
 }
 
 /** رسم دائري (Donut) تفاعلي. */
@@ -266,7 +284,7 @@ fun PieChart(
                 val sweep = s.value / total * 360f
                 val extra = if (i == selectedIndex) 6.dp.toPx() else 0f
                 drawArc(
-                    color = s.color, startAngle = start, sweepAngle = max(0.5f, sweep - 0.8f), useCenter = false,
+                    color = s.color, startAngle = start, sweepAngle = max(0.5f, sweep - if (slices.size > 1) 2f else 0f), useCenter = false,
                     topLeft = Offset(inset - extra / 2, inset - extra / 2),
                     size = Size(this.size.width - 2 * inset + extra, this.size.height - 2 * inset + extra),
                     style = Stroke(width = stroke + extra),

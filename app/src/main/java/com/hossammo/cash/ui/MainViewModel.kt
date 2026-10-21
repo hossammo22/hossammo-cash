@@ -54,6 +54,9 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    fun setDarkTheme(dark: Boolean) = viewModelScope.launch {
+        prefsRepo.setTheme(if (dark) com.hossammo.cash.data.settings.ThemeMode.DARK else com.hossammo.cash.data.settings.ThemeMode.LIGHT)
+    }
     fun completeOnboarding() = viewModelScope.launch { prefsRepo.setOnboardingDone(true) }
     fun toggleHideValues() = viewModelScope.launch { prefsRepo.setHideValues(!(prefs.value?.hideValues ?: false)) }
 }

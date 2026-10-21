@@ -44,6 +44,12 @@ data class ItemDraft(
     val includeInTotal: Boolean,
     val isVariable: Boolean,
     val notes: String?,
+    /** تفاصيل المعدن (null = ليس معدنًا ثمينًا). */
+    val metalType: String? = null,
+    val metalForm: String? = null,
+    val weightGrams: BigDecimal? = null,
+    val purity: Int? = null,
+    val pieceCount: Int? = null,
 )
 
 /** معاملات حفظ رصيد شهري. */
@@ -175,6 +181,8 @@ class LiquidityRepository @Inject constructor(
                     colorHex = draft.colorHex, icon = draft.icon, liquidityLevel = draft.liquidityLevel,
                     includeInTotal = draft.includeInTotal, isVariable = draft.isVariable,
                     notes = draft.notes?.trim()?.ifEmpty { null }, updatedAt = t,
+                    metalType = draft.metalType, metalForm = draft.metalForm, weightGrams = draft.weightGrams,
+                    purity = draft.purity, pieceCount = draft.pieceCount,
                 )
             } else {
                 LiquidityItemEntity(
@@ -183,6 +191,8 @@ class LiquidityRepository @Inject constructor(
                     icon = draft.icon, liquidityLevel = draft.liquidityLevel, includeInTotal = draft.includeInTotal,
                     isVariable = draft.isVariable, notes = draft.notes?.trim()?.ifEmpty { null },
                     sortOrder = itemDao.maxSort() + 1, createdAt = t, updatedAt = t,
+                    metalType = draft.metalType, metalForm = draft.metalForm, weightGrams = draft.weightGrams,
+                    purity = draft.purity, pieceCount = draft.pieceCount,
                 )
             }
             itemDao.upsert(entity)

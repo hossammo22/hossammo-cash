@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
@@ -38,6 +39,7 @@ import com.hossammo.cash.ui.screens.AppScaffold
 private data class MoreEntry(val title: Int, val icon: ImageVector, val route: String, val danger: Boolean = false)
 
 private val settingsEntries = listOf(
+    MoreEntry(R.string.metals_title, Icons.Filled.WorkspacePremium, Routes.METALS),
     MoreEntry(R.string.settings_general, Icons.Filled.Settings, Routes.SETTINGS_GENERAL),
     MoreEntry(R.string.settings_security, Icons.Filled.Security, Routes.SETTINGS_SECURITY),
     MoreEntry(R.string.settings_currency, Icons.Filled.CurrencyExchange, Routes.SETTINGS_CURRENCY),

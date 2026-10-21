@@ -48,13 +48,13 @@ class MandatoryScenarioTest {
         assertTrue(env.db.debtDao().all().all { it.originalAmount == null })
 
         // سبتمبر 2026
-        put(sep, "bank", "200000"); put(sep, "cash", "50000"); put(sep, "gold", "300000")
+        put(sep, "bank_cib1", "200000"); put(sep, "cash", "50000"); put(sep, "gold", "300000")
         put(sep, "stocks", "150000"); put(sep, "farm", "100000"); put(sep, "factory", "80000")
         put(sep, "usd", "1000", lock = true, rate = "51")
         assertEquals(0, bd("931000").compareTo(analyzer().total(sep)))
 
         // أكتوبر 2026: إجمالي 950,000
-        put(oct, "bank", "210000"); put(oct, "cash", "50000"); put(oct, "gold", "309000")
+        put(oct, "bank_cib1", "210000"); put(oct, "cash", "50000"); put(oct, "gold", "309000")
         put(oct, "stocks", "150000"); put(oct, "farm", "100000"); put(oct, "factory", "80000")
         put(oct, "usd", "1000", lock = true, rate = "51")
         val a = analyzer()
@@ -69,11 +69,11 @@ class MandatoryScenarioTest {
         assertEquals(0, bd("950000").compareTo(analyzer().total(oct)))
 
         // تحويل 20,000 من البنك إلى النقدية
-        val r = env.liquidity.addTransfer(TransferDraft(id("bank"), id("cash"), bd("20000"), date = LocalDate.of(2026, 10, 15)), confirmOverdraft = false)
+        val r = env.liquidity.addTransfer(TransferDraft(id("bank_cib1"), id("cash"), bd("20000"), date = LocalDate.of(2026, 10, 15)), confirmOverdraft = false)
         assertEquals(OpResult.Success, r)
         val after = analyzer()
         val rows = after.itemRows(oct).associateBy { it.item.systemKey }
-        assertEquals(0, bd("190000").compareTo(rows["bank"]!!.valueBase))
+        assertEquals(0, bd("190000").compareTo(rows["bank_cib1"]!!.valueBase))
         assertEquals(0, bd("70000").compareTo(rows["cash"]!!.valueBase))
         assertEquals(0, bd("950000").compareTo(after.total(oct)))
     }
@@ -92,12 +92,12 @@ class MandatoryScenarioTest {
     @Test
     fun deletingTransferRestoresBalances() = runBlocking {
         env.seed.seedIfNeeded()
-        put(oct, "bank", "100000"); put(oct, "cash", "1000")
-        env.liquidity.addTransfer(TransferDraft(id("bank"), id("cash"), bd("20000"), date = LocalDate.of(2026, 10, 2)), false)
+        put(oct, "bank_cib1", "100000"); put(oct, "cash", "1000")
+        env.liquidity.addTransfer(TransferDraft(id("bank_cib1"), id("cash"), bd("20000"), date = LocalDate.of(2026, 10, 2)), false)
         val t = env.db.transferDao().all().single()
         env.liquidity.softDeleteTransfer(t.id)
         val rows = analyzer().itemRows(oct).associateBy { it.item.systemKey }
-        assertEquals(0, bd("100000").compareTo(rows["bank"]!!.valueBase))
+        assertEquals(0, bd("100000").compareTo(rows["bank_cib1"]!!.valueBase))
         assertEquals(0, bd("1000").compareTo(rows["cash"]!!.valueBase))
     }
 }

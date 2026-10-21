@@ -150,15 +150,41 @@ fun MoneyText(
 
 @Composable
 fun FinanceCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
-    val colors = CardDefaults.cardColors(containerColor = LocalFinanceColors.current.card)
-    val elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    val fc = LocalFinanceColors.current
+    val colors = CardDefaults.cardColors(containerColor = fc.card)
+    val elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+    val border = androidx.compose.foundation.BorderStroke(1.dp, fc.cardBorder)
     if (onClick != null) {
-        Card(onClick = onClick, modifier = modifier, colors = colors, elevation = elevation, shape = MaterialTheme.shapes.large) {
+        Card(onClick = onClick, modifier = modifier, colors = colors, elevation = elevation, shape = MaterialTheme.shapes.large, border = border) {
             Column(Modifier.padding(16.dp)) { content() }
         }
     } else {
-        Card(modifier = modifier, colors = colors, elevation = elevation, shape = MaterialTheme.shapes.large) {
+        Card(modifier = modifier, colors = colors, elevation = elevation, shape = MaterialTheme.shapes.large, border = border) {
             Column(Modifier.padding(16.dp)) { content() }
+        }
+    }
+}
+
+/** بطاقة رئيسية فاخرة بتدرج كحلي ولمسة ذهبية؛ النصوص بداخلها بيضاء. */
+@Composable
+fun HeroCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
+    val fc = LocalFinanceColors.current
+    val brush = androidx.compose.ui.graphics.Brush.linearGradient(listOf(fc.heroStart, fc.heroEnd))
+    val shape = MaterialTheme.shapes.extraLarge
+    Box(
+        modifier
+            .clip(shape)
+            .background(brush)
+            .border(1.dp, androidx.compose.ui.graphics.Brush.linearGradient(listOf(fc.gold.copy(alpha = 0.9f), fc.gold.copy(alpha = 0.15f))), shape)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+    ) {
+        // زخرفة دائرية ذهبية خفيفة
+        Box(
+            Modifier.align(Alignment.TopStart).padding(start = 0.dp).size(140.dp)
+                .clip(CircleShape).background(fc.gold.copy(alpha = 0.10f))
+        )
+        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides Color.White) {
+            Column(Modifier.padding(20.dp)) { content() }
         }
     }
 }
@@ -178,9 +204,10 @@ fun StatCard(
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (icon != null) {
                 Box(
-                    Modifier.size(32.dp).clip(CircleShape).background(accent.copy(alpha = 0.15f)),
+                    Modifier.size(34.dp).clip(RoundedCornerShape(10.dp))
+                        .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(accent, accent.copy(alpha = 0.6f)))),
                     contentAlignment = Alignment.Center,
-                ) { Icon(icon, null, tint = accent, modifier = Modifier.size(18.dp)) }
+                ) { Icon(icon, null, tint = Color.White, modifier = Modifier.size(19.dp)) }
                 Spacer(Modifier.width(8.dp))
             }
             androidx.compose.material3.Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
@@ -388,8 +415,9 @@ fun IconPicker(selected: String, tint: Color, onSelect: (String) -> Unit) {
 @Composable
 fun ItemAvatar(icon: String?, colorHex: String?, modifier: Modifier = Modifier, size: Int = 40) {
     val c = com.hossammo.cash.ui.theme.parseHexColor(colorHex)
-    Box(modifier.size(size.dp).clip(CircleShape).background(c.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
-        Icon(IconCatalog.icon(icon), null, tint = c, modifier = Modifier.size((size * 0.55f).dp))
+    val brush = androidx.compose.ui.graphics.Brush.linearGradient(listOf(c, c.copy(alpha = 0.65f)))
+    Box(modifier.size(size.dp).clip(RoundedCornerShape((size * 0.32f).dp)).background(brush), contentAlignment = Alignment.Center) {
+        Icon(IconCatalog.icon(icon), null, tint = Color.White, modifier = Modifier.size((size * 0.55f).dp))
     }
 }
 

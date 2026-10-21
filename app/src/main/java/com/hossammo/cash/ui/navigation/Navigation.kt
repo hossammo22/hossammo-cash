@@ -72,7 +72,8 @@ object Routes {
     const val DEBTS = "debts"
     const val MORE = "more"
     const val CHARTS = "charts"
-    const val ITEM_EDIT = "item_edit?id={id}"
+    const val ITEM_EDIT = "item_edit?id={id}&preset={preset}"
+    const val METALS = "metals"
     const val ITEM_DETAIL = "item/{id}"
     const val MONTHS = "months"
     const val MONTH_ENTRY = "month_entry/{key}"
@@ -92,7 +93,11 @@ object Routes {
     const val ABOUT = "about"
     const val DELETE_ALL = "delete_all"
 
-    fun itemEdit(id: String? = null) = if (id == null) "item_edit" else "item_edit?id=$id"
+    fun itemEdit(id: String? = null, preset: String? = null) = buildString {
+        append("item_edit")
+        val params = listOfNotNull(id?.let { "id=$it" }, preset?.let { "preset=$it" })
+        if (params.isNotEmpty()) append("?").append(params.joinToString("&"))
+    }
     fun itemDetail(id: String) = "item/$id"
     fun monthEntry(key: Int) = "month_entry/$key"
     fun debtEdit(id: String? = null, dir: String? = null) = buildString {
@@ -192,9 +197,20 @@ fun AppNavHost(nav: NavHostController, modifier: Modifier = Modifier) {
                 onOpenCategories = { nav.navigate(Routes.CATEGORIES) },
                 onOpenCompare = { nav.navigate(Routes.COMPARE) },
                 onOpenMonthEntry = { nav.navigate(Routes.monthEntry(it)) },
+                onOpenMetals = { nav.navigate(Routes.METALS) },
             )
         }
-        composable(Routes.ITEM_EDIT, arguments = listOf(navArgument("id") { type = NavType.StringType; nullable = true; defaultValue = null })) {
+        composable(Routes.METALS) {
+            com.hossammo.cash.ui.screens.metals.MetalsScreen(
+                onBack = back,
+                onAdd = { nav.navigate(Routes.itemEdit(preset = "metal")) },
+                onEdit = { nav.navigate(Routes.itemEdit(it)) },
+            )
+        }
+        composable(Routes.ITEM_EDIT, arguments = listOf(
+            navArgument("id") { type = NavType.StringType; nullable = true; defaultValue = null },
+            navArgument("preset") { type = NavType.StringType; nullable = true; defaultValue = null },
+        )) {
             ItemEditorScreen(onBack = back, onSaved = back)
         }
         composable(Routes.ITEM_DETAIL, arguments = listOf(navArgument("id") { type = NavType.StringType })) {

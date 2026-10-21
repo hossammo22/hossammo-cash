@@ -97,10 +97,12 @@ data class LockUiState(val pin: String = "", val error: Int? = null, val remaini
 class LockViewModel @Inject constructor(private val prefs: UserPreferencesRepository) : ViewModel() {
     val state = MutableStateFlow(LockUiState())
 
-    fun digit(d: Char) {
+    /** عند اكتمال عدد أرقام الرمز المحفوظ يتم التحقق تلقائيًا دون الضغط على «دخول». */
+    fun digit(d: Char, pinLength: Int?, onOk: () -> Unit) {
         val s = state.value
         if (s.checking || s.lockedSeconds > 0 || s.pin.length >= 8) return
         state.value = s.copy(pin = s.pin + d, error = null)
+        if (pinLength != null && state.value.pin.length == pinLength) submit(onOk)
     }
 
     fun backspace() { state.value = state.value.let { it.copy(pin = it.pin.dropLast(1), error = null) } }
@@ -130,7 +132,7 @@ class LockViewModel @Inject constructor(private val prefs: UserPreferencesReposi
 }
 
 @Composable
-fun LockScreen(biometricEnabled: Boolean, onUnlocked: () -> Unit, vm: LockViewModel = hiltViewModel()) {
+fun LockScreen(biometricEnabled: Boolean, onUnlocked: () -> Unit, pinLength: Int? = null, vm: LockViewModel = hiltViewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val f = fmt()
@@ -175,7 +177,7 @@ fun LockScreen(biometricEnabled: Boolean, onUnlocked: () -> Unit, vm: LockViewMo
         )
         Spacer(Modifier.height(12.dp))
         PinPad(
-            onDigit = vm::digit,
+            onDigit = { d -> vm.digit(d, pinLength, onUnlocked) },
             onBackspace = vm::backspace,
             onSubmit = { vm.submit(onUnlocked) },
             enabled = s.lockedSeconds <= 0,
@@ -194,7 +196,9 @@ fun LockScreen(biometricEnabled: Boolean, onUnlocked: () -> Unit, vm: LockViewMo
 fun PinPad(onDigit: (Char) -> Unit, onBackspace: () -> Unit, onSubmit: () -> Unit, enabled: Boolean = true) {
     val f = fmt()
     val rows = listOf("123", "456", "789")
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    // ترتيب لوحة الهاتف القياسي دائمًا (1 و4 و7 يسارًا، 3 و6 و9 يمينًا) حتى مع واجهة RTL
+    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         rows.forEach { r ->
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 r.forEach { c -> PadKey(with(f) { c.toString().localizeDigits() }, enabled) { onDigit(c) } }
@@ -210,11 +214,12 @@ fun PinPad(onDigit: (Char) -> Unit, onBackspace: () -> Unit, onSubmit: () -> Uni
             }
         }
     }
+    }
 }
 
 @Composable
 private fun PadKey(label: String, enabled: Boolean, onClick: () -> Unit) {
-    FilledTonalButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(64.dp), shape = CircleShape, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
-        Text(label, style = MaterialTheme.typography.headlineSmall)
+    FilledTonalButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(70.dp), shape = CircleShape, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
+        Text(label, style = MaterialTheme.typography.headlineMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold)
     }
 }

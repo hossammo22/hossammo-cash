@@ -124,6 +124,9 @@ interface SavingsMonthDao {
 
 @Dao
 interface MonthlyBalanceDao {
+    @Query("SELECT COUNT(*) FROM monthly_balances WHERE itemId = :itemId AND deletedAt IS NULL")
+    suspend fun countForItem(itemId: String): Int
+
     /** كل الأرصدة النشطة لأشهر نشطة ولعناصر غير محذوفة. */
     @Query(
         """SELECT b.* FROM monthly_balances b

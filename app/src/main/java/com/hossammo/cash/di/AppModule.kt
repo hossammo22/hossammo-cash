@@ -14,4 +14,8 @@ abstract class AppModule {
     @Binds
     @Singleton
     abstract fun bindRateFetcher(impl: CurrencyService): RateFetcher
+
+    @Binds
+    @Singleton
+    abstract fun bindMetalFetcher(impl: com.hossammo.cash.data.metal.MetalPriceService): com.hossammo.cash.data.metal.MetalPriceFetcher
 }

@@ -73,7 +73,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun maintenanceDao(): MaintenanceDao
 
     companion object {
-        const val VERSION = 1
+        const val VERSION = 2
         const val NAME = "hossammo_cash.db"
 
         /**
@@ -82,6 +82,17 @@ abstract class AppDatabase : RoomDatabase() {
          * 2) أضف Migration(n, n+1) هنا بأوامر SQL تحافظ على البيانات.
          * لا يُستخدم fallbackToDestructiveMigration مطلقًا حتى لا تُحذف بيانات المستخدم.
          */
-        val MIGRATIONS: Array<Migration> = arrayOf()
+        /** v2: حقول المعادن الثمينة (الوزن، العيار، الشكل، العدد) لعناصر السيولة. */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE liquidity_items ADD COLUMN metalType TEXT")
+                db.execSQL("ALTER TABLE liquidity_items ADD COLUMN metalForm TEXT")
+                db.execSQL("ALTER TABLE liquidity_items ADD COLUMN weightGrams TEXT")
+                db.execSQL("ALTER TABLE liquidity_items ADD COLUMN purity INTEGER")
+                db.execSQL("ALTER TABLE liquidity_items ADD COLUMN pieceCount INTEGER")
+            }
+        }
+
+        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2)
     }
 }

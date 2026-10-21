@@ -76,12 +76,19 @@ fun AppScaffold(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = {
                     if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) }
                 },
                 actions = {
                     actions()
+                    val theme = com.hossammo.cash.ui.theme.LocalThemeToggle.current
+                    IconButton(onClick = theme.toggle) {
+                        Icon(
+                            if (theme.dark) androidx.compose.material.icons.Icons.Filled.LightMode else androidx.compose.material.icons.Icons.Filled.DarkMode,
+                            stringResource(if (theme.dark) R.string.switch_to_light else R.string.switch_to_dark),
+                        )
+                    }
                     if (showHideToggle) {
                         IconButton(onClick = hide.toggle) {
                             Icon(

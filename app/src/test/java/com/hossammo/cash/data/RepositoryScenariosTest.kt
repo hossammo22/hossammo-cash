@@ -49,7 +49,7 @@ class RepositoryScenariosTest {
         val before = env.db.itemDao().all().size
         env.seed.seedIfNeeded()
         assertEquals(before, env.db.itemDao().all().size)
-        assertEquals(10, before)
+        assertEquals(17, before)
         assertEquals(12, env.db.debtDao().all().size)
         assertEquals(9, env.db.debtDao().all().count { it.direction == DebtDirection.OWED_TO_ME })
         assertTrue(env.db.balanceDao().all().isEmpty())
@@ -57,9 +57,21 @@ class RepositoryScenariosTest {
     }
 
     @Test
+    fun seedHasSevenBanksInOneCategoryAndSilverBar() = runBlocking {
+        val items = env.db.itemDao().all()
+        val banks = items.filter { it.systemKey?.startsWith("bank_") == true }
+        assertEquals(7, banks.size)
+        assertEquals(1, banks.map { it.categoryId }.distinct().size)
+        val silver = env.db.itemDao().bySystemKey("silver_bar_250")!!
+        assertEquals("SILVER", silver.metalType)
+        assertEquals(0, bd("250").compareTo(silver.weightGrams))
+        assertEquals(999, silver.purity)
+    }
+
+    @Test
     fun addMonthAndCopyPrevious() = runBlocking {
         assertEquals(OpResult.Success, env.liquidity.createMonth(sep, copyPrevious = false))
-        env.liquidity.saveBalance(BalanceDraft(sep, id("bank"), bd("1000")), true)
+        env.liquidity.saveBalance(BalanceDraft(sep, id("bank_cib1"), bd("1000")), true)
         env.liquidity.saveBalance(BalanceDraft(sep, id("cash"), bd("500")), true)
         assertEquals(OpResult.Failure(OpError.MONTH_EXISTS), env.liquidity.createMonth(sep, false))
         assertEquals(OpResult.Success, env.liquidity.createMonth(oct, copyPrevious = true))
@@ -70,17 +82,17 @@ class RepositoryScenariosTest {
 
     @Test
     fun duplicateBalanceNeedsConfirmation() = runBlocking {
-        env.liquidity.saveBalance(BalanceDraft(sep, id("bank"), bd("1000")), false)
-        val r = env.liquidity.saveBalance(BalanceDraft(sep, id("bank"), bd("2000")), false)
+        env.liquidity.saveBalance(BalanceDraft(sep, id("bank_cib1"), bd("1000")), false)
+        val r = env.liquidity.saveBalance(BalanceDraft(sep, id("bank_cib1"), bd("2000")), false)
         assertEquals(OpResult.NeedsConfirmation(ConfirmReason.DUPLICATE_BALANCE), r)
-        assertEquals(OpResult.Success, env.liquidity.saveBalance(BalanceDraft(sep, id("bank"), bd("2000")), true))
+        assertEquals(OpResult.Success, env.liquidity.saveBalance(BalanceDraft(sep, id("bank_cib1"), bd("2000")), true))
         assertEquals(0, bd("2000").compareTo(analyzer().total(sep)))
-        assertEquals(OpResult.Failure(OpError.INVALID_AMOUNT), env.liquidity.saveBalance(BalanceDraft(sep, id("bank"), bd("-1")), true))
+        assertEquals(OpResult.Failure(OpError.INVALID_AMOUNT), env.liquidity.saveBalance(BalanceDraft(sep, id("bank_cib1"), bd("-1")), true))
     }
 
     @Test
     fun editItemExcludeFromTotal() = runBlocking {
-        env.liquidity.saveBalance(BalanceDraft(sep, id("bank"), bd("1000")), true)
+        env.liquidity.saveBalance(BalanceDraft(sep, id("bank_cib1"), bd("1000")), true)
         env.liquidity.saveBalance(BalanceDraft(sep, id("gold"), bd("4000")), true)
         val gold = env.db.itemDao().bySystemKey("gold")!!
         val r = env.liquidity.saveItem(
@@ -100,13 +112,13 @@ class RepositoryScenariosTest {
 
     @Test
     fun transferRules() = runBlocking {
-        env.liquidity.saveBalance(BalanceDraft(oct, id("bank"), bd("1000")), true)
+        env.liquidity.saveBalance(BalanceDraft(oct, id("bank_cib1"), bd("1000")), true)
         val date = LocalDate.of(2026, 10, 3)
-        assertEquals(OpResult.Failure(OpError.SAME_ITEM), env.liquidity.addTransfer(TransferDraft(id("bank"), id("bank"), bd("10"), date = date), false))
-        assertEquals(OpResult.NeedsConfirmation(ConfirmReason.EXCEEDS_BALANCE), env.liquidity.addTransfer(TransferDraft(id("bank"), id("cash"), bd("5000"), date = date), false))
+        assertEquals(OpResult.Failure(OpError.SAME_ITEM), env.liquidity.addTransfer(TransferDraft(id("bank_cib1"), id("bank_cib1"), bd("10"), date = date), false))
+        assertEquals(OpResult.NeedsConfirmation(ConfirmReason.EXCEEDS_BALANCE), env.liquidity.addTransfer(TransferDraft(id("bank_cib1"), id("cash"), bd("5000"), date = date), false))
         assertTrue(env.db.transferDao().all().isEmpty())
         // رسوم 10 تُخصم من الإجمالي حسب الإعداد الافتراضي
-        assertEquals(OpResult.Success, env.liquidity.addTransfer(TransferDraft(id("bank"), id("cash"), bd("100"), fee = bd("10"), date = date), false))
+        assertEquals(OpResult.Success, env.liquidity.addTransfer(TransferDraft(id("bank_cib1"), id("cash"), bd("100"), fee = bd("10"), date = date), false))
         assertEquals(0, bd("990").compareTo(analyzer().total(oct)))
     }
 
@@ -153,7 +165,7 @@ class RepositoryScenariosTest {
 
     @Test
     fun backupAndRestore() = runBlocking {
-        env.liquidity.saveBalance(BalanceDraft(sep, id("bank"), bd("1234.5")), true)
+        env.liquidity.saveBalance(BalanceDraft(sep, id("bank_cib1"), bd("1234.5")), true)
         val payload = env.backup.buildPayload()
         val bytes = env.backup.encode(payload, "secret-pass".toCharArray())
         assertEquals(BackupInspectResult.WrongPasswordOrCorrupt, env.backup.inspect(bytes, "wrong-pass".toCharArray()))
@@ -164,7 +176,7 @@ class RepositoryScenariosTest {
         assertTrue(valid is BackupInspectResult.Valid)
 
         // تغيير البيانات بعد النسخ ثم الاستعادة
-        env.liquidity.saveBalance(BalanceDraft(sep, id("bank"), bd("1")), true)
+        env.liquidity.saveBalance(BalanceDraft(sep, id("bank_cib1"), bd("1")), true)
         env.liquidity.saveBalance(BalanceDraft(sep, id("cash"), bd("99")), true)
         val result = env.backup.restore((valid as BackupInspectResult.Valid).payload, "secret-pass".toCharArray())
         assertTrue(result.isSuccess)
@@ -176,8 +188,8 @@ class RepositoryScenariosTest {
 
     @Test
     fun deleteAndRestore() = runBlocking {
-        env.liquidity.saveBalance(BalanceDraft(sep, id("bank"), bd("1000")), true)
-        val bank = id("bank")
+        env.liquidity.saveBalance(BalanceDraft(sep, id("bank_cib1"), bd("1000")), true)
+        val bank = id("bank_cib1")
         env.liquidity.softDeleteItem(bank)
         assertNull(env.liquidity.observeData().first().itemById[bank])
         assertEquals(1, env.liquidity.observeDeletedItems().first().size)

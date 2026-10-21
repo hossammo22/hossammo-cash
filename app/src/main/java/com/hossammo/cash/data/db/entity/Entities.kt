@@ -78,6 +78,16 @@ data class LiquidityItemEntity(
     val createdAt: Long,
     val updatedAt: Long,
     val deletedAt: Long? = null,
+    /** تفاصيل المعادن الثمينة (اختيارية): GOLD / SILVER. */
+    val metalType: String? = null,
+    /** BAR / GOLD_POUND / COIN / JEWELRY / OTHER */
+    val metalForm: String? = null,
+    /** وزن القطعة الواحدة بالجرام. */
+    @Contextual val weightGrams: BigDecimal? = null,
+    /** العيار للذهب (قيراط) أو النقاء بالألف للفضة. */
+    val purity: Int? = null,
+    /** عدد القطع (افتراضيًا 1). */
+    val pieceCount: Int? = null,
 )
 
 @Serializable

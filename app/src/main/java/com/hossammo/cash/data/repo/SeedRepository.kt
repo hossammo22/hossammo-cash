@@ -36,10 +36,33 @@ class SeedRepository @Inject constructor(
         val level: LiquidityLevel,
         val variable: Boolean,
         val locationRes: Int? = null,
+        /** مفتاح الفئة (افتراضيًا = key). */
+        val categoryKey: String = key,
+        val categoryNameRes: Int = nameRes,
+        val metal: com.hossammo.cash.domain.calc.MetalType? = null,
+        val metalForm: com.hossammo.cash.domain.calc.MetalForm? = null,
+        val weightGrams: String? = null,
+        val purity: Int? = null,
     )
 
-    private val seedItems = listOf(
-        SeedItem("bank", R.string.seed_cat_bank, AssetType.BANK_ACCOUNT, "EGP", "#246BCE", "bank", LiquidityLevel.IMMEDIATE, false),
+    /** البنوك التي يتعامل معها المستخدم (أسماء فقط بدون أرصدة؛ قابلة لإعادة التسمية). */
+    private val bankItems = listOf(
+        "bank_cib1" to R.string.seed_bank_cib1, "bank_cib2" to R.string.seed_bank_cib2,
+        "bank_mashreq" to R.string.seed_bank_mashreq, "bank_cairo" to R.string.seed_bank_cairo,
+        "bank_nbe_prepaid" to R.string.seed_bank_nbe_prepaid, "bank_nbe_saving" to R.string.seed_bank_nbe_saving,
+        "bank_misr" to R.string.seed_bank_misr,
+    ).map { (k, res) ->
+        SeedItem(k, res, AssetType.BANK_ACCOUNT, "EGP", "#246BCE", "bank", LiquidityLevel.IMMEDIATE, false, categoryKey = "bank", categoryNameRes = R.string.seed_cat_bank)
+    }
+
+    /** سبيكة الفضة 250 جرام التي ذكرها المستخدم (الوزن فقط؛ القيمة تُحسب من سعر السوق). */
+    private val silverBar = SeedItem(
+        "silver_bar_250", R.string.seed_silver_bar, AssetType.GOLD, "EGP", "#8E9AA6", "gold", LiquidityLevel.NEEDS_LIQUIDATION, true,
+        categoryKey = "gold", categoryNameRes = R.string.seed_cat_gold,
+        metal = com.hossammo.cash.domain.calc.MetalType.SILVER, metalForm = com.hossammo.cash.domain.calc.MetalForm.BAR, weightGrams = "250", purity = 999,
+    )
+
+    private val otherItems = listOf(
         SeedItem("cash", R.string.seed_cat_cash, AssetType.CASH, "EGP", "#2E8B57", "cash", LiquidityLevel.IMMEDIATE, false),
         SeedItem("gold", R.string.seed_cat_gold, AssetType.GOLD, "EGP", "#C69B35", "gold", LiquidityLevel.NEEDS_LIQUIDATION, false),
         SeedItem("stocks", R.string.seed_cat_stocks, AssetType.STOCKS, "EGP", "#7B4FB5", "stocks", LiquidityLevel.WITHIN_DAYS, false),
@@ -51,6 +74,8 @@ class SeedRepository @Inject constructor(
         SeedItem("eur", R.string.seed_cat_eur, AssetType.FOREIGN_CURRENCY, "EUR", "#3D5A99", "currency", LiquidityLevel.IMMEDIATE, true),
     )
 
+    private val seedItems get() = bankItems + otherItems + silverBar
+
     private val owedToMe = listOf(
         R.string.seed_debt_islam, R.string.seed_debt_iman, R.string.seed_debt_khaled, R.string.seed_debt_mahmoud,
         R.string.seed_debt_fayoum, R.string.seed_debt_ahmed_hussein, R.string.seed_debt_walid_ashry,
@@ -60,35 +85,14 @@ class SeedRepository @Inject constructor(
 
     suspend fun seedIfNeeded() {
         val settingDao = db.settingDao()
-        if (settingDao.get(AppSettingsStore.KEY_SEEDED) != null) return
+        if (settingDao.get(AppSettingsStore.KEY_SEEDED) != null) { upgradeV2(); return }
         db.withTransaction {
             if (settingDao.get(AppSettingsStore.KEY_SEEDED) != null) return@withTransaction
             val t = System.currentTimeMillis()
             if (settingDao.get(AppSettingsStore.KEY_BASE_CURRENCY) == null) {
                 settingDao.upsert(AppSettingEntity(AppSettingsStore.KEY_BASE_CURRENCY, AppSettingsStore.DEFAULT_BASE, t))
             }
-            seedItems.forEachIndexed { index, s ->
-                val name = context.getString(s.nameRes)
-                val catId = db.categoryDao().bySystemKey(s.key)?.id ?: UUID.randomUUID().toString().also { id ->
-                    db.categoryDao().upsert(SavingsCategoryEntity(id, name, s.key, s.color, s.icon, index, t, t))
-                }
-                val locId = s.locationRes?.let { res ->
-                    val locName = context.getString(res)
-                    db.locationDao().byName(locName)?.id ?: UUID.randomUUID().toString().also { id ->
-                        db.locationDao().upsert(LocationEntity(id, locName, null, t, t))
-                    }
-                }
-                if (db.itemDao().bySystemKey(s.key) == null) {
-                    db.itemDao().upsert(
-                        LiquidityItemEntity(
-                            id = UUID.randomUUID().toString(), name = name, categoryId = catId, locationId = locId,
-                            assetType = s.asset, currencyCode = s.currency, colorHex = s.color, icon = s.icon,
-                            liquidityLevel = s.level, includeInTotal = true, isArchived = false, isVariable = s.variable,
-                            notes = null, sortOrder = index, systemKey = s.key, createdAt = t, updatedAt = t,
-                        )
-                    )
-                }
-            }
+            seedItems.forEachIndexed { index, s -> insertItem(s, index, t) }
             if (db.debtDao().count() == 0) {
                 var order = 0
                 owedToMe.forEach { res ->
@@ -99,6 +103,57 @@ class SeedRepository @Inject constructor(
                 }
             }
             settingDao.upsert(AppSettingEntity(AppSettingsStore.KEY_SEEDED, "1", t))
+            settingDao.upsert(AppSettingEntity(KEY_SEEDED_V2, "1", t))
         }
+        upgradeV2()
+    }
+
+    /**
+     * ترقية الإصدار 2 للمستخدمين الحاليين: إضافة البنوك السبعة وسبيكة الفضة.
+     * العنصر العام «البنوك» القديم: إن لم يكن له أي رصيد يُؤرشف حتى لا يتكرر، وإلا يبقى كما هو.
+     */
+    suspend fun upgradeV2() {
+        val settingDao = db.settingDao()
+        if (settingDao.get(KEY_SEEDED_V2) != null) return
+        db.withTransaction {
+            if (settingDao.get(KEY_SEEDED_V2) != null) return@withTransaction
+            val t = System.currentTimeMillis()
+            db.itemDao().bySystemKey("bank")?.let { old ->
+                if (old.deletedAt == null && db.balanceDao().countForItem(old.id) == 0) {
+                    db.itemDao().upsert(old.copy(isArchived = true, updatedAt = t))
+                }
+            }
+            var order = db.itemDao().maxSort() + 1
+            (bankItems + silverBar).forEach { s -> insertItem(s, order++, t) }
+            settingDao.upsert(AppSettingEntity(KEY_SEEDED_V2, "1", t))
+        }
+    }
+
+    private suspend fun insertItem(s: SeedItem, index: Int, t: Long) {
+        val catName = context.getString(s.categoryNameRes)
+        val catId = db.categoryDao().bySystemKey(s.categoryKey)?.id ?: UUID.randomUUID().toString().also { id ->
+            db.categoryDao().upsert(SavingsCategoryEntity(id, catName, s.categoryKey, s.color, s.icon, db.categoryDao().maxSort() + 1, t, t))
+        }
+        val locId = s.locationRes?.let { res ->
+            val locName = context.getString(res)
+            db.locationDao().byName(locName)?.id ?: UUID.randomUUID().toString().also { id ->
+                db.locationDao().upsert(LocationEntity(id, locName, null, t, t))
+            }
+        }
+        if (db.itemDao().bySystemKey(s.key) != null) return
+        db.itemDao().upsert(
+            LiquidityItemEntity(
+                id = UUID.randomUUID().toString(), name = context.getString(s.nameRes), categoryId = catId, locationId = locId,
+                assetType = s.asset, currencyCode = s.currency, colorHex = s.color, icon = s.icon,
+                liquidityLevel = s.level, includeInTotal = true, isArchived = false, isVariable = s.variable,
+                notes = null, sortOrder = index, systemKey = s.key, createdAt = t, updatedAt = t,
+                metalType = s.metal?.name, metalForm = s.metalForm?.name, weightGrams = s.weightGrams?.let { java.math.BigDecimal(it) },
+                purity = s.purity, pieceCount = if (s.metal != null) 1 else null,
+            )
+        )
+    }
+
+    companion object {
+        const val KEY_SEEDED_V2 = "seeded_v2_banks_metals"
     }
 }
