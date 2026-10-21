@@ -28,7 +28,7 @@ def nodes():
         if len(b) != 4: continue
         x1, y1, x2, y2 = map(int, b)
         res.append(dict(text=n.get("text", ""), desc=n.get("content-desc", ""), cls=n.get("class", ""),
-                        x=(x1 + x2) // 2, y=(y1 + y2) // 2, y1=y1, y2=y2))
+                        x=(x1 + x2) // 2, y=(y1 + y2) // 2, x1=x1, x2=x2, y1=y1, y2=y2))
     return res, x
 
 counter = [0]
@@ -71,6 +71,22 @@ def tap(label, exact=True, pick="first", timeout=25, scroll=False):
             swipes = (swipes + 1) % 10
         else: time.sleep(1)
     raise RuntimeError(f"not found: {label}")
+
+def tap_fab(timeout=20):
+    """أزرار FAB الممتدة لا تظهر نصوصها في uiautomator؛ نضغط أدنى زر بلا نص في النصف الأيسر من الشاشة."""
+    end = time.time() + timeout
+    while time.time() < end:
+        dismiss_system_dialogs()
+        ns, _ = nodes()
+        c = [n for n in ns if n["cls"] == "android.widget.Button" and not n["text"] and n["x"] < 540 and 1500 < n["y"] < 2300]
+        if c:
+            n = max(c, key=lambda n: n["y"])
+            adb("shell", "input", "tap", str(n["x"]), str(n["y"])); time.sleep(2); return True
+        time.sleep(1)
+    raise RuntimeError("FAB not found")
+
+def scroll_to_top():
+    for _ in range(6): swipe_down()
 
 def swipe_up():
     adb("shell", "input", "swipe", "540", "1600", "540", "1100", "300"); time.sleep(1)
@@ -154,7 +170,7 @@ def open_months():
     tap("خيارات إضافية", pick="top"); tap("الأشهر")
 
 def add_month(m, empty):
-    tap("إضافة شهر", pick="last")
+    tap_fab()
     if m != cur:
         tap(months[cur - 1], pick="last"); tap(months[m - 1], pick="last")
     if empty: tap("شهر فارغ")
@@ -180,10 +196,21 @@ def s_liq():
     back(); home_tab("السيولة والمدخرات"); shot("03_liquidity")
 step("liquidity", s_liq)
 
+def s_metals():
+    home_tab("السيولة والمدخرات")
+    tap("الذهب والفضة", pick="top"); time.sleep(8); shot("13_gold_silver"); back()
+step("metals", s_metals)
+
+def s_dark():
+    home_tab("الرئيسية"); tap("الوضع الداكن", pick="top"); time.sleep(2); shot("14_dashboard_dark")
+    home_tab("السيولة والمدخرات"); shot("15_liquidity_dark")
+    tap("الوضع الفاتح", pick="top"); time.sleep(1)
+
 def s_dash():
     home_tab("الرئيسية"); shot("02_dashboard")
     swipe_up(); shot("02b_dashboard_charts")
 step("dashboard", s_dash)
+step("dark", s_dark)
 
 def s_charts():
     tap("كل الرسومات", scroll=True); time.sleep(2); shot("06_charts"); back()
@@ -191,7 +218,7 @@ step("charts", s_charts)
 
 def s_debt():
     home_tab("الديون")
-    tap("إضافة دين", pick="last")
+    tap_fab()
     save_dump("debt_editor")
     type_into(0, "Car loan"); hide_kb()
     type_into(1, "1000000"); hide_kb()
@@ -205,11 +232,11 @@ step("variable", s_var)
 
 def s_report():
     home_tab("التقارير والإعدادات")
-    tap("تقرير الزيادة والانخفاض", scroll=True); time.sleep(3); shot("10_report"); back()
+    scroll_to_top(); tap("تقرير الزيادة والانخفاض", scroll=True); time.sleep(3); shot("10_report"); back()
 step("report", s_report)
 
 def s_backup():
-    tap("النسخ الاحتياطي والاستعادة", scroll=True); shot("11_backup"); back()
+    home_tab("التقارير والإعدادات"); tap("النسخ الاحتياطي والاستعادة", scroll=True); shot("11_backup"); back()
 step("backup", s_backup)
 
 def s_security():
