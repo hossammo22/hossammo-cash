@@ -122,9 +122,20 @@ def ensure_app():
     if PKG not in adb("shell", "dumpsys", "window", "displays").split("mCurrentFocus")[-1][:200]:
         adb("shell", "am", "start", "-n", f"{PKG}/.MainActivity"); time.sleep(4)
 
+def go_home():
+    """يرجع للشاشات الرئيسية (التي بها شريط التنقل السفلي) ويتجاهل أي تغييرات غير محفوظة."""
+    for _ in range(5):
+        ns, _ = nodes()
+        texts = {n["text"] for n in ns}
+        if "الرئيسية" in texts: return
+        d = next((n for n in ns if n["text"] in ("تجاهل التعديلات", "إلغاء")), None)
+        if d: adb("shell", "input", "tap", str(d["x"]), str(d["y"])); time.sleep(1.5); continue
+        back()
+
 def step(name, fn):
     dismiss_system_dialogs()
     ensure_app()
+    go_home()
     try:
         fn(); p("OK  ", name)
     except Exception as e:
@@ -185,15 +196,14 @@ def add_month(m, empty):
 def s_prev():
     open_months(); add_month(prev, True)
     save_dump("month_entry_prev")
-    type_into(0, "500000"); hide_kb()
-    type_into(1, "431000"); hide_kb()
+    type_into(0, "931000"); hide_kb()
     shot("04_month_entry")
     tap("حفظ الكل"); time.sleep(2); back()
 step("prev_month", s_prev)
 
 def s_cur():
-    add_month(cur, False)
-    type_into(0, "519000"); hide_kb()
+    open_months(); add_month(cur, False)
+    type_into(0, "950000"); hide_kb()
     tap("حفظ الكل"); time.sleep(2); back()
     shot("05_months")
 step("cur_month", s_cur)
