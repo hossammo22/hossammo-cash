@@ -44,9 +44,20 @@ def find(label, exact=True, pick="first"):
     if not m: return None
     return max(m, key=lambda n: n["y"]) if pick == "last" else m[0]
 
+def dismiss_system_dialogs():
+    """يغلق نوافذ النظام مثل «Pixel Launcher isn't responding» التي تظهر على المحاكي البطيء."""
+    ns, _ = nodes()
+    texts = [n["text"] for n in ns]
+    if any("isn't responding" in t or "keeps stopping" in t for t in texts):
+        for n in ns:
+            if n["text"] in ("Wait", "Close app", "OK"):
+                adb("shell", "input", "tap", str(n["x"]), str(n["y"])); time.sleep(2); p("dismissed system dialog"); return True
+    return False
+
 def tap(label, exact=True, pick="first", timeout=10, scroll=False):
     end = time.time() + timeout
     while time.time() < end:
+        dismiss_system_dialogs()
         n = find(label, exact, pick)
         if n:
             adb("shell", "input", "tap", str(n["x"]), str(n["y"])); time.sleep(1.5); return True
@@ -86,6 +97,7 @@ def ensure_app():
         adb("shell", "am", "start", "-n", f"{PKG}/.MainActivity"); time.sleep(4)
 
 def step(name, fn):
+    dismiss_system_dialogs()
     ensure_app()
     try:
         fn(); p("OK  ", name)
@@ -99,6 +111,8 @@ months = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "�
 cur = int(adb("shell", "date", "+%m").strip() or "10")
 prev = 12 if cur == 1 else cur - 1
 
+time.sleep(30)  # يترك المحاكي يستقر بعد الإقلاع
+dismiss_system_dialogs()
 adb("shell", "pm", "grant", PKG, "android.permission.POST_NOTIFICATIONS")
 adb("shell", "am", "start", "-n", f"{PKG}/.MainActivity"); time.sleep(10)
 save_dump("start")
