@@ -27,7 +27,7 @@ def nodes():
         b = re.findall(r"\d+", n.get("bounds", ""))
         if len(b) != 4: continue
         x1, y1, x2, y2 = map(int, b)
-        res.append(dict(text=n.get("text", ""), desc=n.get("content-desc", ""), cls=n.get("class", ""),
+        res.append(dict(pkg=n.get("package", ""), text=n.get("text", ""), desc=n.get("content-desc", ""), cls=n.get("class", ""),
                         x=(x1 + x2) // 2, y=(y1 + y2) // 2, x1=x1, x2=x2, y1=y1, y2=y2))
     return res, x
 
@@ -119,18 +119,22 @@ def shot(name):
     p("shot", name, len(png))
 
 def ensure_app():
-    if PKG not in adb("shell", "dumpsys", "window", "displays").split("mCurrentFocus")[-1][:200]:
-        adb("shell", "am", "start", "-n", f"{PKG}/.MainActivity"); time.sleep(4)
+    for _ in range(3):
+        ns, _ = nodes()
+        if any(n["pkg"] == PKG for n in ns): return
+        adb("shell", "am", "start", "-n", f"{PKG}/.MainActivity"); time.sleep(5)
 
 def go_home():
-    """يرجع للشاشات الرئيسية (التي بها شريط التنقل السفلي) ويتجاهل أي تغييرات غير محفوظة."""
-    for _ in range(5):
+    """يرجع للشاشات الرئيسية (بها شريط التنقل السفلي) ويتجاهل أي تغييرات غير محفوظة. لا يضغط رجوع إلا عند وجود زر رجوع."""
+    for _ in range(6):
         ns, _ = nodes()
         texts = {n["text"] for n in ns}
         if "الرئيسية" in texts: return
         d = next((n for n in ns if n["text"] in ("تجاهل التعديلات", "إلغاء")), None)
         if d: adb("shell", "input", "tap", str(d["x"]), str(d["y"])); time.sleep(1.5); continue
-        back()
+        b = next((n for n in ns if n["desc"] == "رجوع"), None)
+        if b: adb("shell", "input", "tap", str(b["x"]), str(b["y"])); time.sleep(1.5); continue
+        time.sleep(2)
 
 def step(name, fn):
     dismiss_system_dialogs()
