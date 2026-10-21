@@ -46,7 +46,7 @@ class ReportExporter @javax.inject.Inject constructor(@dagger.hilt.android.quali
 
     fun writeCsv(doc: ReportDocument, os: OutputStream) {
         val sb = StringBuilder()
-        sb.append('﻿') // BOM لعرض العربية بشكل صحيح في Excel
+        sb.append('\uFEFF') // BOM لعرض العربية بشكل صحيح في Excel
         fun line(cells: List<String>) {
             sb.append(cells.joinToString(",") { csvEscape(it) }).append("\r\n")
         }
