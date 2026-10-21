@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -85,7 +87,7 @@ fun AppScaffold(
                     val theme = com.hossammo.cash.ui.theme.LocalThemeToggle.current
                     IconButton(onClick = theme.toggle) {
                         Icon(
-                            if (theme.dark) androidx.compose.material.icons.Icons.Filled.LightMode else androidx.compose.material.icons.Icons.Filled.DarkMode,
+                            if (theme.dark) Icons.Filled.LightMode else Icons.Filled.DarkMode,
                             stringResource(if (theme.dark) R.string.switch_to_light else R.string.switch_to_dark),
                         )
                     }
