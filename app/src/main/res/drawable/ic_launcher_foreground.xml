@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- عملة ذهبية -->
+    <path android:fillColor="#C69B35" android:pathData="M54,30a24,24 0,1 1,0 48a24,24 0,1 1,0 -48z" />
+    <path android:fillColor="#E2C27A" android:pathData="M54,35a19,19 0,1 1,0 38a19,19 0,1 1,0 -38z" />
+    <!-- أعمدة نمو -->
+    <path android:fillColor="#172A3A" android:pathData="M42,62h6v6h-6z M51,56h6v12h-6z M60,49h6v19h-6z" />
+    <!-- سهم صاعد -->
+    <path android:fillColor="#2E8B57" android:pathData="M40,52 L52,43 L58,48 L66,41 L66,38 L72,38 L72,44 L69,44 L69,43 L58,52 L52,47 L42,55 Z" />
+</vector>

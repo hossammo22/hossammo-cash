@@ -1,0 +1,88 @@
+name: Android build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode signing key (optional)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > release.jks
+            printf 'storeFile=release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > keystore.properties
+            echo "signing=yes" >> "$GITHUB_ENV"
+          else
+            echo "signing=no" >> "$GITHUB_ENV"
+          fi
+
+      # كل أمر يُنفذ منفصلًا ويُحفظ ناتجه ورمز خروجه في build-logs
+      - name: Run required Gradle commands
+        run: |
+          mkdir -p build-logs
+          status=0
+          for task in clean testDebugUnitTest lintDebug assembleDebug assembleRelease bundleRelease; do
+            echo "::group::./gradlew $task"
+            set +e
+            ./gradlew $task --stacktrace --no-daemon 2>&1 | tee "build-logs/$task.log"
+            code=${PIPESTATUS[0]}
+            set -e
+            echo "::endgroup::"
+            echo "$task exit=$code" | tee -a build-logs/summary.txt
+            if [ $code -ne 0 ]; then status=1; break; fi
+          done
+          exit $status
+
+      - name: Collect outputs
+        if: always()
+        run: |
+          mkdir -p out
+          cp -r build-logs out/ || true
+          find app/build/outputs -name '*.apk' -o -name '*.aab' | xargs -r -I{} cp {} out/ || true
+          cp -r app/build/reports out/reports || true
+          cp -r app/build/test-results out/app-test-results || true
+          cp -r domain/build/test-results out/domain-test-results || true
+          cp -r domain/build/reports out/domain-reports || true
+          cd out && ls -la && (ls *.apk *.aab 2>/dev/null | xargs -r sha256sum > checksums.txt || true)
+          cd .. && tar czf build-report.tgz -C out .
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-output
+          path: out/
+
+      - name: Publish build as release
+        if: always() && github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Build ${{ github.run_number }}
+          prerelease: true
+          body: "CI build ${{ github.run_number }} (${{ github.sha }}). signing=${{ env.signing }}. See build-report.tgz for logs."
+          files: |
+            build-report.tgz
+            out/*.apk
+            out/*.aab
