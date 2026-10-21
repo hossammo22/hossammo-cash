@@ -81,7 +81,12 @@ def shot(name):
     open(os.path.join(OUT, name + ".png"), "wb").write(png)
     p("shot", name, len(png))
 
+def ensure_app():
+    if PKG not in adb("shell", "dumpsys", "window", "displays").split("mCurrentFocus")[-1][:200]:
+        adb("shell", "am", "start", "-n", f"{PKG}/.MainActivity"); time.sleep(4)
+
 def step(name, fn):
+    ensure_app()
     try:
         fn(); p("OK  ", name)
     except Exception as e:
@@ -99,7 +104,11 @@ adb("shell", "am", "start", "-n", f"{PKG}/.MainActivity"); time.sleep(10)
 save_dump("start")
 
 def s_onboarding():
-    tap("تخطي")
+    for _ in range(5):
+        n = find("تخطي")
+        if not n: return
+        adb("shell", "input", "tap", str(n["x"]), str(n["y"])); time.sleep(3)
+    raise RuntimeError("onboarding did not close")
 step("onboarding", s_onboarding)
 
 def s_secure():
