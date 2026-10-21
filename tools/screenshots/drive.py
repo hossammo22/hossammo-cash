@@ -42,7 +42,9 @@ def find(label, exact=True, pick="first"):
     m = [n for n in ns if (n["text"] == label or n["desc"] == label) or
          (not exact and (label in n["text"] or label in n["desc"]))]
     if not m: return None
-    return max(m, key=lambda n: n["y"]) if pick == "last" else m[0]
+    if pick == "last": return max(m, key=lambda n: n["y"])
+    if pick == "top": return min(m, key=lambda n: n["y"])
+    return m[0]
 
 def dismiss_system_dialogs():
     """يغلق نوافذ النظام مثل «Pixel Launcher isn't responding» التي تظهر على المحاكي البطيء."""
@@ -54,19 +56,27 @@ def dismiss_system_dialogs():
                 adb("shell", "input", "tap", str(n["x"]), str(n["y"])); time.sleep(2); p("dismissed system dialog"); return True
     return False
 
-def tap(label, exact=True, pick="first", timeout=10, scroll=False):
+def tap(label, exact=True, pick="first", timeout=25, scroll=False):
     end = time.time() + timeout
+    swipes = 0
     while time.time() < end:
         dismiss_system_dialogs()
         n = find(label, exact, pick)
         if n:
             adb("shell", "input", "tap", str(n["x"]), str(n["y"])); time.sleep(1.5); return True
-        if scroll: swipe_up()
+        if scroll:
+            # ننزل أولًا ثم نصعد إن لم نجد العنصر
+            if swipes < 5: swipe_up()
+            else: swipe_down()
+            swipes = (swipes + 1) % 10
         else: time.sleep(1)
     raise RuntimeError(f"not found: {label}")
 
 def swipe_up():
-    adb("shell", "input", "swipe", "540", "1700", "540", "800", "400"); time.sleep(1)
+    adb("shell", "input", "swipe", "540", "1600", "540", "1100", "300"); time.sleep(1)
+
+def swipe_down():
+    adb("shell", "input", "swipe", "540", "900", "540", "1500", "300"); time.sleep(1)
 
 def back():
     adb("shell", "input", "keyevent", "4"); time.sleep(1.5)
@@ -141,7 +151,7 @@ step("dashboard_empty", s_empty)
 
 def open_months():
     home_tab("السيولة والمدخرات")
-    tap("خيارات إضافية"); tap("الأشهر")
+    tap("خيارات إضافية", pick="top"); tap("الأشهر")
 
 def add_month(m, empty):
     tap("إضافة شهر", pick="last")
