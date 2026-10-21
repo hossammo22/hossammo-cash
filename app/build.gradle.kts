@@ -33,6 +33,13 @@ android {
     }
 
     signingConfigs {
+        // مفتاح debug ثابت داخل المستودع حتى تُثبَّت التحديثات فوق النسخة السابقة دون حذف البيانات
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         if (hasReleaseSigning) {
             create("release") {
                 storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
