@@ -200,14 +200,14 @@ def add_month(m, empty):
 def s_prev():
     open_months(); add_month(prev, True)
     save_dump("month_entry_prev")
-    type_into(0, "931000"); hide_kb()
+    type_into(1, "931000"); hide_kb()
     shot("04_month_entry")
     hide_kb(); tap_fab(); time.sleep(2); back()
 step("prev_month", s_prev)
 
 def s_cur():
     open_months(); add_month(cur, False)
-    type_into(0, "950000"); hide_kb()
+    type_into(1, "950000"); hide_kb()
     hide_kb(); tap_fab(); time.sleep(2); back()
     shot("05_months")
 step("cur_month", s_cur)
