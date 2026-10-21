@@ -152,6 +152,19 @@ fun HossamMoCashTheme(themeMode: ThemeMode = ThemeMode.SYSTEM, onToggleTheme: (B
         Color(0xFF5CC58A), Color(0xFFEF8080), Brand.GoldLight, Color(0xFF8DB4F0), Color(0xFF151C24), Brand.GoldLight,
         heroStart = Color(0xFF1B2C3D), heroEnd = Color(0xFF0B1118), cardBorder = Brand.Gold.copy(alpha = 0.22f),
     ) else FinanceColors(Brand.Green, Brand.Red, Color(0xFFB08A2E), Brand.Blue, Color.White, Brand.Gold)
+    // لون أيقونات شريط الحالة يتبع مظهر التطبيق (وليس مظهر الهاتف)
+    val view = androidx.compose.ui.platform.LocalView.current
+    if (!view.isInEditMode) {
+        androidx.compose.runtime.SideEffect {
+            var c: android.content.Context? = view.context
+            while (c is android.content.ContextWrapper && c !is android.app.Activity) c = c.baseContext
+            (c as? android.app.Activity)?.window?.let { w ->
+                val ctl = androidx.core.view.WindowCompat.getInsetsController(w, view)
+                ctl.isAppearanceLightStatusBars = !dark
+                ctl.isAppearanceLightNavigationBars = !dark
+            }
+        }
+    }
     androidx.compose.runtime.CompositionLocalProvider(LocalFinanceColors provides finance, LocalThemeToggle provides ThemeToggle(dark) { onToggleTheme(!dark) }) {
         MaterialTheme(
             colorScheme = if (dark) DarkColors else LightColors,

@@ -59,6 +59,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -180,8 +181,9 @@ fun HeroCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, conte
     ) {
         // زخرفة دائرية ذهبية خفيفة
         Box(
-            Modifier.align(Alignment.TopStart).padding(start = 0.dp).size(140.dp)
-                .clip(CircleShape).background(fc.gold.copy(alpha = 0.10f))
+            Modifier.align(Alignment.BottomEnd).size(120.dp)
+                .graphicsLayer { translationX = -40.dp.toPx(); translationY = 50.dp.toPx() }
+                .clip(CircleShape).background(fc.gold.copy(alpha = 0.08f))
         )
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides Color.White) {
             Column(Modifier.padding(20.dp)) { content() }

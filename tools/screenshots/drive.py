@@ -172,7 +172,13 @@ def open_months():
 def add_month(m, empty):
     tap_fab()
     if m != cur:
-        tap(months[cur - 1], pick="last"); tap(months[m - 1], pick="last")
+        # حقول القوائم المنسدلة لا تظهر نصوصها؛ حقل الشهر هو النصف الأيمن من أول صف في النافذة
+        ns, _ = nodes()
+        title = next((n for n in ns if n["text"] == "إضافة شهر"), None)
+        y = (title["y2"] + 110) if title else 1035
+        adb("shell", "input", "tap", "730", str(y)); time.sleep(2)
+        save_dump("month_menu")
+        tap(months[m - 1], pick="last")
     if empty: tap("شهر فارغ")
     tap("إنشاء", pick="last"); time.sleep(2)
 
