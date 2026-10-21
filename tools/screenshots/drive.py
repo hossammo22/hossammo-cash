@@ -107,7 +107,9 @@ def s_onboarding():
     for _ in range(5):
         n = find("تخطي")
         if not n: return
+        p("tap skip at", n["x"], n["y"])
         adb("shell", "input", "tap", str(n["x"]), str(n["y"])); time.sleep(3)
+        p("focus:", adb("shell", "dumpsys", "window").split("mCurrentFocus")[-1][:120])
     raise RuntimeError("onboarding did not close")
 step("onboarding", s_onboarding)
 
@@ -189,4 +191,6 @@ step("backup", s_backup)
 def s_security():
     tap("الأمان والخصوصية", scroll=True); shot("12_security"); back()
 step("security", s_security)
+open(os.path.join(OUT, "logcat_errors.txt"), "w", encoding="utf-8").write(
+    adb("logcat", "-d", "-b", "crash") + "\n=====\n" + adb("logcat", "-d", "*:W"))
 p("done")
